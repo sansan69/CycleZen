@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Coordinate } from "@/services/open-route-service";
+import mapboxgl from 'mapbox-gl'; // Import the mapboxgl library
 
 interface MapProps {
   location: Coordinate | null;
@@ -15,10 +16,8 @@ export function Map({ location, onLocationChange }: MapProps) {
     if (!mapRef.current) return;
 
     const loadMap = async () => {
-      const mapboxgl = await import("mapbox-gl");
-      mapboxgl.setAccessToken(
-        "pk.eyJ1IjoiZGFuaWxlYWFyaXkiLCJhIjoiY2x0a2E5cHRwMDkwMzJwcGN4dHVvd3BwdyJ9.CcLp-DxLGbhwyxVtO1My0g" // Replace with your Mapbox token
-      );
+      mapboxgl.accessToken =
+        "pk.eyJ1IjoiZGFuaWxlYWFyaXkiLCJhIjoiY2x0a2E5cHRwMDkwMzJwcGN4dHVvd3BwdyJ9.CcLp-DxLGbhwyxVtO1My0g"; // Replace with your Mapbox token
 
       const map = new mapboxgl.Map({
         container: mapRef.current,
