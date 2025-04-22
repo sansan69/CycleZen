@@ -1,29 +1,150 @@
 "use client";
 
+import GoogleMapComponent from "@/components/google-map";
+import { getCyclingRoutes, Coordinate } from "@/services/open-route-service";
 import { useState, useEffect } from "react";
+import {
+  collection,
+  addDoc,
+  Firestore,
+  doc,
+  getFirestore,
+} from "firebase/firestore";
+
+import { app } from "@/lib/firebase.ts";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
-  CardTitle,
+  CardTitle
 } from "@/components/ui/card";
+import { Button as UiButton, Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Coordinate, getCyclingRoutes } from "@/services/open-route-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
-import GoogleMapComponent from "@/components/google-map";
+
+import {
+  GoogleMap,
+  LoadScript,
+  Polyline,
+  Marker,
+} from "@react-google-maps/api";
+
+
+interface RouteData {
+  geometry: string;
+  distance: number;
+  duration: number;
+  segments: {
+    distance: number;
+    duration: number;
+    steps: {
+      distance: number;
+      duration: number;
+      type: number;
+      instruction: string;
+      name: string;
+      way_points: number[];
+      exit_number: string;
+    }[];
+  }[];
+}
+
+
+const RouteDisplay = ({
+  route,
+  user,
+}: {
+  route: RouteData;
+  user: any;
+}) => {
+  const routeUrl = `https://www.google.com/maps/dir/?api=1&travelmode=walking&dir_action=navigate&waypoints=${route.geometry.split(' ').join('|')}`
+  const { toast } = useToast();
+  const [center, setCenter] = useState({
+    lat: 0,
+    lng: 0,
+  });
+  const mapStyles = {
+    height: "300px",
+    width: "100%",
+  };
+
+  useEffect(() => {
+    const routePoints = route.geometry;
+    const points = routePoints.split(" ").map((point) => {
+      const [lng, lat] = point.split(",");
+      return { lat: parseFloat(lat), lng: parseFloat(lng) };
+    });
+
+    setCenter(points[Math.floor(points.length / 2)]);
+  }, [route]);
+
+  const handleSaveRoute = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to save routes.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const db: Firestore = getFirestore(app);
+    try {
+      const docRef = await addDoc(collection(db, "routes"), {
+        userId: user.uid,
+        routeData: route,
+        timestamp: new Date(),
+      });
+      toast({
+        title: "Route Saved",
+        description: `Route saved successfully with ID: ${docRef.id}`,
+      });
+    } catch (error) {
+      console.error("Error saving route:", error);
+      toast({
+        title: "Save Error",
+        description: "Failed to save route. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Route</CardTitle>
+        <CardDescription>
+          Distance: {(route.distance / 1000).toFixed(2)} km, Duration:{" "}
+          {(route.duration / 60).toFixed(0)} min
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <GoogleMap mapContainerStyle={mapStyles} zoom={10} center={center} >
+          <Polyline path={route.geometry.split(" ").map((point) => { 
+            const [lng, lat] = point.split(",");
+            return { lat: parseFloat(lat), lng: parseFloat(lng) };
+          })} />
+        </GoogleMap>
+      </CardContent>
+      <CardFooter className="flex justify-between">
+        <Button><a href={routeUrl} target='_blank'>Open in Google Maps</a></Button>
+        <UiButton onClick={handleSaveRoute}>Save this route</UiButton>
+      </CardFooter> 
+    </Card>
+  );
+};
 
 export default function Home() {
   const [radius, setRadius] = useState<number>(5);
-  const [routes, setRoutes] = useState<any[]>([]);
+  const [showMap, setShowMap] = useState<boolean>(true);
+  const [route, setRoute] = useState<RouteData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const { toast } = useToast();
-  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(
-    null
+  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(   
+    null,
   );
 
   const handleGenerateRoutes = async () => {
@@ -39,7 +160,8 @@ export default function Home() {
     setLoading(true);
     try {
       const generatedRoutes = await getCyclingRoutes(selectedLocation, radius);
-      setRoutes(generatedRoutes);
+      setRoute(generatedRoutes);
+      setShowMap(false);
     } catch (error) {
       console.error("Error generating routes:", error);
       toast({
@@ -54,10 +176,19 @@ export default function Home() {
 
   const handleLocationSelected = (location: Coordinate) => {
     setSelectedLocation(location);
+    toast({
+      title: 'Location Updated',
+      description: `New location selected: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
+    });
+    
   };
+
+  const user = null;
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4">
+      <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''} />
+
       <Toaster />
       <div className="container mx-auto max-w-2xl">
         <Card className="mb-4">
@@ -84,18 +215,22 @@ export default function Home() {
               />
             </div>
 
-            <GoogleMapComponent onLocationSelected={handleLocationSelected} />
+            {showMap && (
+             <GoogleMapComponent onLocationSelected={handleLocationSelected} />
+            )}
 
-            <Button onClick={handleGenerateRoutes} disabled={loading}>
+            <UiButton onClick={handleGenerateRoutes} disabled={loading}>
               {loading ? (
                 <>
                   <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
                   Generating...
                 </>
               ) : (
-                "Generate Routes"
+                "Generate Routes" 
               )}
-            </Button>
+            </UiButton>
+            
+            
           </CardContent>
         </Card>
 
@@ -119,22 +254,10 @@ export default function Home() {
           </div>
         )}
 
-        {!loading && routes.length > 0 && (
+         {!loading && route && (
           <div className="grid gap-4">
-            {routes.map((route, index) => (
-              <Card key={index}>
-                <CardHeader>
-                  <CardTitle>Route {index + 1}</CardTitle>
-                  <CardDescription>
-                    Distance: {route.distance} km
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {/* Placeholder for map preview */}
-                  <div>Map Preview</div>
-                </CardContent>
-              </Card>
-            ))}
+            
+            {route && <RouteDisplay route={route} user={user} />}
           </div>
         )}
       </div>

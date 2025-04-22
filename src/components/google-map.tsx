@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
 
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+const googleMapsApiKey =
+  "AIzaSyDoCRiWM2oL2ka68KFtrUCw-RqIcDXU6zs";
 
 interface GoogleMapComponentProps {
   onLocationSelected: (location: Coordinate) => void;
@@ -37,7 +38,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: googleMapsApiKey || '',
+    googleMapsApiKey: googleMapsApiKey,
   });
 
   useEffect(() => {
@@ -51,10 +52,20 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         }
 
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
+            const options: PositionOptions = {
+              enableHighAccuracy: true,
+              timeout: 5000,
+              maximumAge: 0,
+            };
+            
+            navigator.geolocation.getCurrentPosition(resolve, reject, options);
         });
-
+          
         const { latitude, longitude } = position.coords;
+
+        // Check if the browser supports navigator.permissions before querying
+        if(navigator.permissions && navigator.permissions.query){
+        }
         setCurrentLocation({ lat: latitude, lng: longitude });
         setSelectedLocation({ lat: latitude, lng: longitude }); // Initialize selected location
       } catch (err: any) {
