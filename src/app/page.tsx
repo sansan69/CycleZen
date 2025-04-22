@@ -29,11 +29,11 @@ import { useToast } from "@/hooks/use-toast";
 
 import {
   GoogleMap,
-  LoadScript,
   Polyline,
   Marker,
 } from "@react-google-maps/api";
 
+import { LoadScript } from "@react-google-maps/api";
 
 interface RouteData {
   geometry: string;
@@ -137,7 +137,8 @@ const RouteDisplay = ({
   );
 };
 
-export default function Home() {
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+const HomePage = () => {
   const [radius, setRadius] = useState<number>(5);
   const [showMap, setShowMap] = useState<boolean>(true);
   const [route, setRoute] = useState<RouteData | null>(null);
@@ -196,8 +197,6 @@ export default function Home() {
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4">
-      <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''} />
-
       <Toaster />
       <div className="container mx-auto max-w-2xl">
         <Card className="mb-4">
@@ -273,5 +272,13 @@ export default function Home() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <LoadScript googleMapsApiKey={googleMapsApiKey}>
+      <HomePage />
+    </LoadScript>
   );
 }
