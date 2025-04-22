@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface GoogleMapComponentProps {
   onLocationSelected: (location: Coordinate) => void;
+  googleMapsApiKey: string;
 }
 
 const defaultCenter: Coordinate = {
@@ -18,6 +19,7 @@ const defaultCenter: Coordinate = {
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
+  googleMapsApiKey,
 }) => {
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(
@@ -32,8 +34,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     disableDefaultUI: true,
     zoomControl: true,
   };
-
-  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',

@@ -226,6 +226,7 @@ const HomePage = () => {
             {showMap && (
              <GoogleMapComponent 
                onLocationSelected={handleLocationSelected} 
+               googleMapsApiKey={googleMapsApiKey}
              />
             )}
 
@@ -276,6 +277,7 @@ const HomePage = () => {
 }
 
 export default function Home() {
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
   return (
     <LoadScript googleMapsApiKey={googleMapsApiKey}>
       <HomePage />
