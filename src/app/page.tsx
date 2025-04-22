@@ -13,14 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Map } from "@/components/map";
 import { Coordinate, getCyclingRoutes } from "@/services/open-route-service";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toaster, toast } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const [location, setLocation] = useState<Coordinate | null>(null);
   const [radius, setRadius] = useState<number>(5);
   const [routes, setRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     // Get initial location on mount
@@ -50,7 +52,7 @@ export default function Home() {
         variant: "destructive",
       });
     }
-  }, []);
+  }, [toast]);
 
   const handleLocationChange = (newLocation: Coordinate) => {
     setLocation(newLocation);

@@ -68,4 +68,3 @@ export function Map({ location, onLocationChange }: MapProps) {
     />
   );
 }
-/
