@@ -159,6 +159,15 @@ export default function Home() {
 
     setLoading(true);
     try {
+      const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
+      if (!apiKey) {
+        toast({
+          title: "API Key Missing",
+          description: "OpenRouteService API key is missing. Please configure it to generate routes.",
+          variant: "destructive",
+        });
+        return;
+      }
       const generatedRoutes = await getCyclingRoutes(selectedLocation, radius);
       setRoute(generatedRoutes);
       setShowMap(false);
