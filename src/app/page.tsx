@@ -225,7 +225,9 @@ export default function Home() {
             </div>
 
             {showMap && (
-             <GoogleMapComponent onLocationSelected={handleLocationSelected} />
+             <GoogleMapComponent 
+               onLocationSelected={handleLocationSelected} 
+             />
             )}
 
             <UiButton onClick={handleGenerateRoutes} disabled={loading}>

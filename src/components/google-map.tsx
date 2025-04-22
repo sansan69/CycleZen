@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleMap, LoadScript, Marker, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { Coordinate } from '@/services/open-route-service';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
-
-const googleMapsApiKey =
-  "AIzaSyDoCRiWM2oL2ka68KFtrUCw-RqIcDXU6zs";
 
 interface GoogleMapComponentProps {
   onLocationSelected: (location: Coordinate) => void;
@@ -35,6 +32,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     disableDefaultUI: true,
     zoomControl: true,
   };
+
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
@@ -94,7 +93,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast, googleMapsApiKey]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
