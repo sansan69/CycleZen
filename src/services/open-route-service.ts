@@ -46,13 +46,14 @@ export async function getCyclingRoutes(
   numberOfRoutes: number = 3
 ): Promise<CyclingRoute[]> {  
   const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OpenRouteService API key is missing.");
-  }
-
+  
   const cyclingRoutes: CyclingRoute[] = [];
   const maxTries = 3;
+
+  if (!apiKey) {
+    console.error("OpenRouteService API key is missing. Please configure it to use the map.");
+    return [];
+  }
 
   for (let i = 0; i < numberOfRoutes; i++) {
     let route: CyclingRoute | null = null;
@@ -106,7 +107,8 @@ async function fetchRoute(apiKey:string, location: Coordinate, radius: number): 
   });
 
   if (!response.ok) {
-    throw new Error(`OpenRouteService API request failed with status: ${response.status}`);
+    const errorBody = await response.text();
+    throw new Error(`OpenRouteService API request failed with status: ${response.status}, body: ${errorBody}`);
   }
 
   const data = await response.json();
@@ -163,4 +165,3 @@ function getRandomPoint(center: Coordinate): [number, number] {
 
   return [lng, lat];
 }
-
