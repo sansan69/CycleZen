@@ -16,8 +16,9 @@ export function Map({ location, onLocationChange }: MapProps) {
 
     const loadMap = async () => {
       const mapboxgl = await import("mapbox-gl");
-      mapboxgl.accessToken =
-        "pk.eyJ1IjoiZGFuaWxlYWFyaXkiLCJhIjoiY2x0a2E5cHRwMDkwMzJwcGN4dHVvd3BwdyJ9.CcLp-DxLGbhwyxVtO1My0g"; // Replace with your Mapbox token
+      mapboxgl.setAccessToken(
+        "pk.eyJ1IjoiZGFuaWxlYWFyaXkiLCJhIjoiY2x0a2E5cHRwMDkwMzJwcGN4dHVvd3BwdyJ9.CcLp-DxLGbhwyxVtO1My0g" // Replace with your Mapbox token
+      );
 
       const map = new mapboxgl.Map({
         container: mapRef.current,
