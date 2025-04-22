@@ -63,8 +63,8 @@ export function Map({location, onLocationChange}: MapProps) {
           new mapboxgl.Marker().setLngLat([newLocation.lng, newLocation.lat]).addTo(map);
         });
 
-        map.on('error', (error) => {
-          console.error('Mapbox API error:', error);
+        map.on('error', (/*error*/) => {
+          /*console.error('Mapbox API error:', error);*/
         });
       } catch (error) {
         console.error('Error loading Mapbox map:', error);
@@ -82,5 +82,3 @@ export function Map({location, onLocationChange}: MapProps) {
     />
   );
 }
-
-
