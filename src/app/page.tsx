@@ -250,20 +250,24 @@ const HomePage = () => {
   useEffect(() => {
     const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
     const projectIdMissing = !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID.trim() === '';
+    const authDomainMissing = !process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN.trim() === '';
 
-    if (apiKeyMissing || projectIdMissing) {
+    if (apiKeyMissing || projectIdMissing || authDomainMissing) {
         let missingVars: string[] = [];
         if (apiKeyMissing) missingVars.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
         if (projectIdMissing) missingVars.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
-        const message = `${missingVars.join(" and ")} is missing or empty. Authentication is unavailable.`;
+        if (authDomainMissing) missingVars.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
+        
+        const message = `${missingVars.join(", ")} is missing or empty. Authentication is unavailable.`;
         toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
         console.error(`CRITICAL: ${message}`);
         // authLoading remains true to disable auth buttons
         return; 
     }
     
-    console.log('page.tsx useEffect: Subscribing to auth state changes.');
     console.log('page.tsx useEffect: Project ID from env is:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
+    console.log('page.tsx useEffect: Auth Domain from env is:', process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN);
+
 
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
@@ -290,7 +294,7 @@ const HomePage = () => {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
       if (error.code === 'auth/unauthorized-domain') {
-        description = "Error: This app's domain (e.g., localhost) is not authorized for Google Sign-In in your Firebase project. Please check your Firebase console > Authentication > Settings > Authorized domains, and ensure 'localhost' is added.";
+        description = "Error: This app's domain (e.g., localhost) is not authorized for Google Sign-In in your Firebase project, OR your app's configured `authDomain` may not match your Firebase project. Please verify: \n1. In Firebase console > Authentication > Settings > Authorized domains: ensure 'localhost' (or your app's domain) is listed. \n2. In your .env file: ensure `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` matches the Auth Domain in your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration). \n3. Restart your app server after any .env changes.";
       }
       toast({ title: "Sign-in Error", description, variant: "destructive" });
       setAuthLoading(false); 
@@ -483,6 +487,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
-
     
