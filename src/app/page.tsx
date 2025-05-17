@@ -73,49 +73,43 @@ const RouteDisplay = ({
 
   let waypointsForGoogleMaps: Coordinate[] = [];
   if (route.coordinates && route.coordinates.length > 0) {
-    waypointsForGoogleMaps.push(route.coordinates[0]); // Start point
+    waypointsForGoogleMaps.push(route.coordinates[0]); 
 
     if (route.coordinates.length > 2 && route.coordinates.length > MAX_GOOGLE_MAPS_WAYPOINTS) {
         const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2;
         const totalRoutePoints = route.coordinates.length;
-        // Ensure step is at least 1 to avoid infinite loops on short routes with many waypoints allowed
         const step = Math.max(1, Math.floor((totalRoutePoints - 2) / (numIntermediatePoints > 0 ? numIntermediatePoints : 1)));
 
         for (let i = 1; i <= numIntermediatePoints; i++) {
             const waypointIndex = i * step;
-            // Ensure intermediate points are not start/end and within bounds
             if (waypointIndex > 0 && waypointIndex < totalRoutePoints - 1) {
                 waypointsForGoogleMaps.push(route.coordinates[waypointIndex]);
             }
         }
     }
-    // Add end point, only if it's different from the start and total waypoints are less than max
+    
     if (route.coordinates.length > 1) {
         const endPoint = route.coordinates[route.coordinates.length - 1];
-        // Add if not already the last point (e.g. from intermediate points) or if list is not full
         if (waypointsForGoogleMaps.length < MAX_GOOGLE_MAPS_WAYPOINTS || 
             (waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS && 
              waypointsForGoogleMaps[waypointsForGoogleMaps.length-1].lat !== endPoint.lat &&
              waypointsForGoogleMaps[waypointsForGoogleMaps.length-1].lng !== endPoint.lng)) {
             
             if(waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS) {
-                 waypointsForGoogleMaps.pop(); // Make space if full and end point is different
+                 waypointsForGoogleMaps.pop(); 
             }
             waypointsForGoogleMaps.push(endPoint);
         }
     }
-    // Remove duplicates (e.g. start=end for very short routes or single point routes)
-    // also handles if the calculated intermediate points were too close to start/end
+   
      waypointsForGoogleMaps = waypointsForGoogleMaps.filter((point, index, self) =>
         index === self.findIndex((p) => p.lat === point.lat && p.lng === point.lng)
     );
 
-     // Final check: if more than MAX points, trim from the middle (less ideal but a fallback)
     if (waypointsForGoogleMaps.length > MAX_GOOGLE_MAPS_WAYPOINTS) {
         const start = waypointsForGoogleMaps[0];
         const end = waypointsForGoogleMaps[waypointsForGoogleMaps.length-1];
         const intermediate = waypointsForGoogleMaps.slice(1, -1);
-        // const numToRemove = intermediate.length - (MAX_GOOGLE_MAPS_WAYPOINTS - 2); // not used
         const trimmedIntermediate = intermediate.filter((_,idx) => idx % (Math.floor(intermediate.length / (MAX_GOOGLE_MAPS_WAYPOINTS -2)) || 1) === 0).slice(0,MAX_GOOGLE_MAPS_WAYPOINTS-2);
         waypointsForGoogleMaps = [start, ...trimmedIntermediate, end];
     }
@@ -160,7 +154,7 @@ const RouteDisplay = ({
         },
         timestamp: new Date(),
         routeName: `Route near ${user.displayName || 'selected location'} on ${new Date().toLocaleDateString()}`,
-        sharedUrl: routeUrl, // Save the generated Google Maps share URL
+        sharedUrl: routeUrl,
       });
       toast({
         title: "Route Saved",
@@ -264,25 +258,27 @@ const HomePage = () => {
       const message = `${missing.join(" and ")} is missing or empty. Authentication is unavailable.`;
       toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
       console.error(`CRITICAL: ${message}`);
-      // setAuthLoading(false); // Keep authLoading true to disable auth buttons
+      // authLoading remains true to disable auth buttons
       return;
     }
 
     if (!firebaseAuth) {
       toast({ title: "Authentication Error", description: "Firebase Auth service (firebaseAuth) is undefined. This could be due to an initialization error in firebase.ts. Check console for logs from firebase.ts.", variant: "destructive" });
       console.error("CRITICAL: firebaseAuth is undefined. Firebase Auth failed to initialize. Check firebase.ts logs. Imported firebaseAuth:", firebaseAuth);
-      // setAuthLoading(false); // Keep authLoading true
+      // authLoading remains true
       return;
     }
 
     if (typeof firebaseAuth.onAuthStateChanged !== 'function' || !firebaseAuth.app) {
-      toast({ title: "Authentication Error", description: "Firebase Auth service is not a valid Auth instance. Check Firebase initialization in firebase.ts.", variant: "destructive" });
-      console.error("CRITICAL: firebaseAuth is not a valid Auth instance (missing onAuthStateChanged or app). Imported firebaseAuth:", firebaseAuth, "App options:", firebaseAuth?.app?.options);
-      // setAuthLoading(false); // Keep authLoading true
+      toast({ title: "Authentication Error", description: "Firebase Auth service is not a valid Auth instance (onAuthStateChanged or .app missing). Check Firebase initialization in firebase.ts.", variant: "destructive" });
+      console.error("CRITICAL: firebaseAuth is not a valid Auth instance (onAuthStateChanged or .app missing). Imported firebaseAuth:", firebaseAuth, "App options:", firebaseAuth?.app?.options, "typeof .onAuthStateChanged:", typeof firebaseAuth.onAuthStateChanged);
+       // authLoading remains true
       return;
     }
     
     console.log('Firebase SDK appears initialized. Project ID used by client:', firebaseAuth.app.options?.projectId);
+    console.log('page.tsx useEffect: firebaseAuth type is', typeof firebaseAuth, 'typeof firebaseAuth.signInWithPopup is', typeof firebaseAuth.signInWithPopup);
+
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       setCurrentUser(user);
       setAuthLoading(false); 
@@ -302,9 +298,17 @@ const HomePage = () => {
 
 
   const handleGoogleSignIn = async () => {
-    if (!firebaseAuth ||  typeof firebaseAuth.signInWithPopup !== 'function') {
+    console.log("[handleGoogleSignIn] Attempting Google Sign-In.");
+    console.log("[handleGoogleSignIn] firebaseAuth object:", firebaseAuth);
+    if (firebaseAuth && firebaseAuth.signInWithPopup) {
+      console.log("[handleGoogleSignIn] typeof firebaseAuth.signInWithPopup:", typeof firebaseAuth.signInWithPopup);
+    } else {
+      console.log("[handleGoogleSignIn] firebaseAuth is falsy or firebaseAuth.signInWithPopup is not present.");
+    }
+
+    if (!firebaseAuth || typeof firebaseAuth.signInWithPopup !== 'function') {
       toast({ title: "Authentication Error", description: "Firebase Auth not properly initialized. Cannot sign in. Check console for 'CRITICAL' messages.", variant: "destructive" });
-      console.error("handleGoogleSignIn: firebaseAuth not properly initialized or is not a valid Auth instance.", firebaseAuth);
+      console.error("handleGoogleSignIn: firebaseAuth not properly initialized or is not a valid Auth instance. typeof .signInWithPopup:", typeof firebaseAuth?.signInWithPopup, "firebaseAuth object:", firebaseAuth);
       return;
     }
     const provider = new GoogleAuthProvider();
@@ -320,9 +324,17 @@ const HomePage = () => {
   };
 
   const handleSignOut = async () => {
+    console.log("[handleSignOut] Attempting Sign-Out.");
+    console.log("[handleSignOut] firebaseAuth object:", firebaseAuth);
+    if (firebaseAuth && firebaseAuth.signOut) {
+      console.log("[handleSignOut] typeof firebaseAuth.signOut:", typeof firebaseAuth.signOut);
+    } else {
+      console.log("[handleSignOut] firebaseAuth is falsy or firebaseAuth.signOut is not present.");
+    }
+
     if (!firebaseAuth || typeof firebaseAuth.signOut !== 'function') {
       toast({ title: "Authentication Error", description: "Firebase Auth not properly initialized. Cannot sign out. Check console for 'CRITICAL' messages.", variant: "destructive" });
-      console.error("handleSignOut: firebaseAuth not properly initialized or is not a valid Auth instance.", firebaseAuth);
+      console.error("handleSignOut: firebaseAuth not properly initialized or is not a valid Auth instance. typeof .signOut:", typeof firebaseAuth?.signOut, "firebaseAuth object:", firebaseAuth);
       return;
     }
     try {
@@ -393,6 +405,7 @@ const HomePage = () => {
 
   useEffect(() => {
     if (selectedLocation) {
+      // Only toast if it's not the very first location set or if it's genuinely different
       if (previousSelectedLocationRef.current &&
           (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
            previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
@@ -509,4 +522,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
