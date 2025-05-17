@@ -7,11 +7,8 @@ import { useState, useEffect, useCallback } from "react";
 import {
   collection,
   addDoc,
-  // Firestore, // Not directly used, db is imported
-  // getFirestore, // Not directly used, db is imported
 } from "firebase/firestore";
 import {
-  // getAuth, // Not directly used, firebaseAuth is imported
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
@@ -19,7 +16,7 @@ import {
   User,
 } from "firebase/auth";
 
-import { app, db, auth as firebaseAuth } from "@/lib/firebase.ts"; // Renamed auth import
+import { app, db, auth as firebaseAuth } from "@/lib/firebase.ts";
 import {
   Card,
   CardContent,
@@ -38,7 +35,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   GoogleMap,
   Polyline,
-  // LoadScript // Not used anymore
 } from "@react-google-maps/api";
 
 
@@ -77,47 +73,52 @@ const RouteDisplay = ({
 
   let waypointsForGoogleMaps: Coordinate[] = [];
   if (route.coordinates && route.coordinates.length > 0) {
-    if (route.coordinates.length <= MAX_GOOGLE_MAPS_WAYPOINTS) {
-      waypointsForGoogleMaps = route.coordinates;
-    } else {
-      waypointsForGoogleMaps.push(route.coordinates[0]); // Start point
-      const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2; // -2 for start and end
-      const totalRoutePoints = route.coordinates.length;
-      const step = Math.floor((totalRoutePoints - 2) / (numIntermediatePoints > 0 ? numIntermediatePoints : 1));
+    waypointsForGoogleMaps.push(route.coordinates[0]); // Start point
 
-      for (let i = 1; i <= numIntermediatePoints; i++) {
-        const waypointIndex = i * step;
-        if (waypointIndex > 0 && waypointIndex < totalRoutePoints - 1) { // Ensure intermediate points are not start/end
-           waypointsForGoogleMaps.push(route.coordinates[waypointIndex]);
+    if (route.coordinates.length > 2 && route.coordinates.length > MAX_GOOGLE_MAPS_WAYPOINTS) {
+        const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2;
+        const totalRoutePoints = route.coordinates.length;
+        // Ensure step is at least 1 to avoid infinite loops on short routes with many waypoints allowed
+        const step = Math.max(1, Math.floor((totalRoutePoints - 2) / (numIntermediatePoints > 0 ? numIntermediatePoints : 1)));
+
+        for (let i = 1; i <= numIntermediatePoints; i++) {
+            const waypointIndex = i * step;
+            // Ensure intermediate points are not start/end and within bounds
+            if (waypointIndex > 0 && waypointIndex < totalRoutePoints - 1) {
+                waypointsForGoogleMaps.push(route.coordinates[waypointIndex]);
+            }
         }
-      }
-      // Add end point, ensure it's not a duplicate if only one intermediate point was pushed close to end
-      if (waypointsForGoogleMaps.length < MAX_GOOGLE_MAPS_WAYPOINTS && totalRoutePoints > 1) {
-         const lastPoint = route.coordinates[totalRoutePoints - 1];
-         if (!waypointsForGoogleMaps.find(wp => wp.lat === lastPoint.lat && wp.lng === lastPoint.lng)) {
-            waypointsForGoogleMaps.push(lastPoint);
-         }
-      }
-       // If due to short routes or step calculation, we have less than max but more than 1 point, ensure end point is last.
-      if (waypointsForGoogleMaps.length > 1 && waypointsForGoogleMaps[waypointsForGoogleMaps.length-1] !== route.coordinates[totalRoutePoints-1]){
-        //This logic might be complex, for now, ensure start and end are distinct and present.
-        // The goal is: Start, Intermediate1, ..., IntermediateN, End
-      }
     }
-     // Ensure start and end are always present if coordinates exist
-    if(route.coordinates.length > 0 && !waypointsForGoogleMaps.includes(route.coordinates[0])) {
-        waypointsForGoogleMaps.unshift(route.coordinates[0]);
+    // Add end point, only if it's different from the start and total waypoints are less than max
+    if (route.coordinates.length > 1) {
+        const endPoint = route.coordinates[route.coordinates.length - 1];
+        // Add if not already the last point (e.g. from intermediate points) or if list is not full
+        if (waypointsForGoogleMaps.length < MAX_GOOGLE_MAPS_WAYPOINTS || 
+            (waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS && 
+             waypointsForGoogleMaps[waypointsForGoogleMaps.length-1].lat !== endPoint.lat &&
+             waypointsForGoogleMaps[waypointsForGoogleMaps.length-1].lng !== endPoint.lng)) {
+            
+            if(waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS) {
+                 waypointsForGoogleMaps.pop(); // Make space if full and end point is different
+            }
+            waypointsForGoogleMaps.push(endPoint);
+        }
     }
-    if(route.coordinates.length > 1 && !waypointsForGoogleMaps.find(wp => wp.lat === route.coordinates[route.coordinates.length -1].lat && wp.lng === route.coordinates[route.coordinates.length -1].lng)) {
-        // if the last point isn't already there (e.g. was an intermediate point or list too short)
-        if(waypointsForGoogleMaps.length >= MAX_GOOGLE_MAPS_WAYPOINTS) waypointsForGoogleMaps.pop(); // make space if full
-        waypointsForGoogleMaps.push(route.coordinates[route.coordinates.length -1]);
-    }
-    // Remove duplicates just in case (e.g. start=end for very short routes / single point routes)
-    waypointsForGoogleMaps = waypointsForGoogleMaps.filter((point, index, self) =>
-      index === self.findIndex((p) => p.lat === point.lat && p.lng === point.lng)
+    // Remove duplicates (e.g. start=end for very short routes or single point routes)
+    // also handles if the calculated intermediate points were too close to start/end
+     waypointsForGoogleMaps = waypointsForGoogleMaps.filter((point, index, self) =>
+        index === self.findIndex((p) => p.lat === point.lat && p.lng === point.lng)
     );
 
+     // Final check: if more than MAX points, trim from the middle (less ideal but a fallback)
+    if (waypointsForGoogleMaps.length > MAX_GOOGLE_MAPS_WAYPOINTS) {
+        const start = waypointsForGoogleMaps[0];
+        const end = waypointsForGoogleMaps[waypointsForGoogleMaps.length-1];
+        const intermediate = waypointsForGoogleMaps.slice(1, -1);
+        const numToRemove = intermediate.length - (MAX_GOOGLE_MAPS_WAYPOINTS - 2);
+        const trimmedIntermediate = intermediate.filter((_,idx) => idx % (Math.floor(intermediate.length / (MAX_GOOGLE_MAPS_WAYPOINTS -2)) || 1) === 0).slice(0,MAX_GOOGLE_MAPS_WAYPOINTS-2);
+        waypointsForGoogleMaps = [start, ...trimmedIntermediate, end];
+    }
   }
 
 
@@ -140,18 +141,26 @@ const RouteDisplay = ({
       });
       return;
     }
+    if (!db) {
+      toast({
+        title: "Database Error",
+        description: "Firestore database is not available. Cannot save route.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       await addDoc(userSavedRoutesCollection, {
         routeData: {
           distance: route.distance,
           estimatedTime: route.estimatedTime,
-          coordinates: route.coordinates, // Save the full original coordinates
+          coordinates: route.coordinates, 
           geometry: route.geometry,
         },
         timestamp: new Date(),
         routeName: `Route near ${user.displayName || 'selected location'} on ${new Date().toLocaleDateString()}`,
-        sharedUrl: routeUrl,
+        sharedUrl: routeUrl, // Save the generated Google Maps share URL
       });
       toast({
         title: "Route Saved",
@@ -219,7 +228,7 @@ const RouteDisplay = ({
           </Button>
           <Button
             onClick={handleSaveRoute}
-            disabled={!user || !user.uid} // Disable if no user
+            disabled={!user || !user.uid} 
             className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
           >
             <Icons.plusCircle className="mr-2 h-4 w-4" /> Save this route
@@ -241,45 +250,54 @@ const HomePage = () => {
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [authLoading, setAuthLoading] = useState<boolean>(true); // Start as true
 
   useEffect(() => {
-    // Check if firebaseAuth (the imported auth object from firebase.ts) is available and seems like a valid Auth instance
-    if (firebaseAuth && typeof firebaseAuth.onAuthStateChanged === 'function' && firebaseAuth.app) {
-      console.log('Firebase SDK initialized. Project ID used by client:', firebaseAuth.app.options?.projectId);
-      const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-        setCurrentUser(user);
-        setAuthLoading(false);
-        if (user) {
-          console.log("User signed in:", user.uid);
-        } else {
-          console.log("User signed out.");
-        }
-      });
-      return () => unsubscribe();
-    } else {
-      // This block handles cases where firebaseAuth is not properly initialized
-      setAuthLoading(false);
-      const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
+    const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
+    const projectIdMissing = !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID.trim() === '';
 
-      if (apiKeyMissing) {
-         toast({ title: "Configuration Error", description: "Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing or empty. Authentication is unavailable. Please check your .env file and restart the server.", variant: "destructive" });
-         console.error("CRITICAL: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing or empty.");
-      } else if (!firebaseAuth) {
-         // API key is present, but auth object itself is not initialized (e.g. getAuth(app) failed in firebase.ts)
-         toast({ title: "Authentication Error", description: "Firebase Auth service (firebaseAuth) is undefined. This could be due to an initialization error in firebase.ts after the API key check, or if getAuth(app) failed. Check console for logs from firebase.ts.", variant: "destructive" });
-         console.error("CRITICAL: firebaseAuth is undefined. Firebase Auth failed to initialize even with an API key present. Check firebase.ts logs. Imported firebaseAuth:", firebaseAuth);
-      } else if (typeof firebaseAuth.onAuthStateChanged !== 'function' || !firebaseAuth.app) {
-         // Auth object is present but not a valid Auth instance (missing methods/app)
-         toast({ title: "Authentication Error", description: "Firebase Auth service is not a valid Auth instance. Check Firebase initialization in firebase.ts.", variant: "destructive" });
-         console.error("CRITICAL: firebaseAuth is not a valid Auth instance (missing onAuthStateChanged or app). Imported firebaseAuth:", firebaseAuth, "App options:", firebaseAuth?.app?.options);
-      } else {
-         // This case should ideally not be reached if the above cover all issues
-         toast({ title: "Authentication Error", description: "An unknown issue occurred with Firebase Auth initialization. Please check console and Firebase configuration.", variant: "destructive" });
-         console.error("CRITICAL: Unknown Firebase Auth initialization issue. Imported firebaseAuth:", firebaseAuth, "App options:", firebaseAuth?.app?.options);
-      }
+    if (apiKeyMissing || projectIdMissing) {
+      let missing = [];
+      if (apiKeyMissing) missing.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
+      if (projectIdMissing) missing.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
+      const message = `${missing.join(" and ")} is missing or empty. Authentication is unavailable.`;
+      toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
+      console.error(`CRITICAL: ${message}`);
+      // setAuthLoading(false); // Keep authLoading true to disable auth buttons
+      return;
     }
-  }, [toast]); // firebaseAuth is stable from import, toast is a hook.
+
+    if (!firebaseAuth) {
+      toast({ title: "Authentication Error", description: "Firebase Auth service (firebaseAuth) is undefined. This could be due to an initialization error in firebase.ts. Check console for logs from firebase.ts.", variant: "destructive" });
+      console.error("CRITICAL: firebaseAuth is undefined. Firebase Auth failed to initialize. Check firebase.ts logs. Imported firebaseAuth:", firebaseAuth);
+      // setAuthLoading(false); // Keep authLoading true
+      return;
+    }
+
+    if (typeof firebaseAuth.onAuthStateChanged !== 'function' || !firebaseAuth.app) {
+      toast({ title: "Authentication Error", description: "Firebase Auth service is not a valid Auth instance. Check Firebase initialization in firebase.ts.", variant: "destructive" });
+      console.error("CRITICAL: firebaseAuth is not a valid Auth instance (missing onAuthStateChanged or app). Imported firebaseAuth:", firebaseAuth, "App options:", firebaseAuth?.app?.options);
+      // setAuthLoading(false); // Keep authLoading true
+      return;
+    }
+    
+    console.log('Firebase SDK appears initialized. Project ID used by client:', firebaseAuth.app.options?.projectId);
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false); // Only set to false after onAuthStateChanged completes
+      if (user) {
+        console.log("User signed in:", user.uid);
+      } else {
+        console.log("User signed out.");
+      }
+    }, (error) => {
+        console.error("CRITICAL: Error in onAuthStateChanged listener:", error);
+        toast({ title: "Authentication State Error", description: "Could not determine authentication state. Please refresh.", variant: "destructive" });
+        setAuthLoading(false); // Also set to false here to allow potential recovery or show login
+    });
+
+    return () => unsubscribe();
+  }, [toast]);
 
 
   const handleGoogleSignIn = async () => {
@@ -296,9 +314,9 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
       toast({ title: "Sign-in Error", description: `Code: ${error.code}\nMessage: ${error.message}`, variant: "destructive" });
-    } finally {
-      setAuthLoading(false);
-    }
+      setAuthLoading(false); // Reset on error
+    } 
+    // authLoading will be set to false by onAuthStateChanged
   };
 
   const handleSignOut = async () => {
@@ -311,13 +329,13 @@ const HomePage = () => {
       setAuthLoading(true);
       await signOut(firebaseAuth);
       toast({ title: "Signed Out", description: "Successfully signed out." });
-      setCurrentUser(null); // Explicitly set user to null
+      // setCurrentUser(null); // onAuthStateChanged will handle this
     } catch (error: any) {
       console.error("Error signing out:", error);
       toast({ title: "Sign-out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-    } finally {
-      setAuthLoading(false);
+      setAuthLoading(false); // Reset on error
     }
+    // authLoading will be set to false by onAuthStateChanged
   };
 
 
@@ -332,7 +350,7 @@ const HomePage = () => {
     }
 
     setLoadingRoutes(true);
-    setRoutes(null); // Clear previous routes
+    setRoutes(null); 
     try {
       const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
       if (!apiKey) {
@@ -347,7 +365,7 @@ const HomePage = () => {
       const generatedRoutes = await getCyclingRoutes(selectedLocation, radius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
-        setShowMapInput(false); // Hide map input and show routes
+        setShowMapInput(false); 
          toast({
           title: "Routes Generated",
           description: `${generatedRoutes.length} cycling routes found.`,
@@ -372,16 +390,16 @@ const HomePage = () => {
   }, [selectedLocation, radius, toast]);
 
   const handleLocationSelected = useCallback((location: Coordinate) => {
-    setSelectedLocation(location);
-    // Only show toast if the location actually changed significantly, to avoid spam on minor updates or re-renders
-    // This simple check might need refinement if location objects are complex or frequently re-created
-    if (location.lat !== selectedLocation?.lat || location.lng !== selectedLocation?.lng) {
-      toast({
-        title: 'Location Updated',
-        description: `New location selected: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
-      });
-    }
-  }, [toast, selectedLocation]); // added selectedLocation as dependency
+    setSelectedLocation(prevLocation => {
+      if (prevLocation?.lat !== location.lat || prevLocation?.lng !== location.lng) {
+        toast({
+          title: 'Location Updated',
+          description: `New location selected: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
+        });
+      }
+      return location;
+    });
+  }, [toast]); 
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
@@ -390,7 +408,7 @@ const HomePage = () => {
         <div className="flex justify-end items-center mb-4">
           {authLoading ? (
             <Button variant="outline" disabled>
-              <Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Loading...
+              <Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Loading Auth...
             </Button>
           ) : currentUser ? (
             <div className="flex items-center gap-3">
@@ -487,3 +505,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
