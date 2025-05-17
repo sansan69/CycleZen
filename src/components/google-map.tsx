@@ -19,7 +19,8 @@ const defaultCenter: Coordinate = {
   lng: -118.243683,
 };
 
-const GOOGLE_MAPS_LIBRARIES = ['places'] as ('places')[]; // Ensure stable reference
+// Add 'geometry' library for spherical calculations
+const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
@@ -31,7 +32,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const [loading, setLoading] = useState<boolean>(true); 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const mapRef = useRef<google.maps.Map>();
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   const mapOptions = {
     disableDefaultUI: true,
@@ -43,7 +44,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     strokeOpacity: 0.8,
     strokeWeight: 2,
     fillColor: "hsl(var(--accent))", 
-    fillOpacity: 0.20, // Slightly more transparent fill
+    fillOpacity: 0.20,
     clickable: false,
     draggable: false,
     editable: false,
@@ -70,16 +71,17 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         duration: 10000,
       });
       setCurrentLocation(defaultCenter);
-      setSelectedLocation(defaultCenter);
+      setSelectedLocation(defaultCenter); // Set a default selected location as well
       setLoading(false);
       return;
     }
 
     if (!isLoaded) {
+      // Wait for API to load
       setLoading(false); 
       return;
     }
-
+    
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser.');
       toast({ title: "Geolocation Error", description: "Geolocation is not supported by your browser. Please select a location manually.", variant: "destructive", duration: 7000 });
@@ -115,7 +117,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         console.warn("Could not query geolocation permission status:", permError.message, "Proceeding to attempt fetching location.");
       }
     }
-
+    
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           const options: PositionOptions = {
@@ -127,8 +129,11 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       });
         
       const { latitude, longitude } = position.coords;
-      setCurrentLocation({ lat: latitude, lng: longitude });
-      setSelectedLocation({ lat: latitude, lng: longitude });
+      const fetchedLocation = { lat: latitude, lng: longitude };
+      setCurrentLocation(fetchedLocation);
+      if (!selectedLocation) { // Only set selectedLocation if it's not already set by user interaction
+          setSelectedLocation(fetchedLocation);
+      }
     } catch (err: any) {
       console.error('Error getting location (getCurrentPosition):', err.message, err.code, err.name);
       setError(err.message);
@@ -155,28 +160,19 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         variant: "destructive",
         duration: 10000,
       });
-      setCurrentLocation(defaultCenter); 
-      setSelectedLocation(defaultCenter); 
+      // Only set default if no location was ever selected/current
+      if (!currentLocation && !selectedLocation) {
+        setCurrentLocation(defaultCenter); 
+        setSelectedLocation(defaultCenter); 
+      }
     } finally {
       setLoading(false);
     }
-  }, [toast, googleMapsApiKey, isLoaded]); 
-
-  useEffect(() => {
-    getLocation();
-  }, [getLocation]);
-
+  }, [toast, googleMapsApiKey, isLoaded, selectedLocation]); // Added selectedLocation to re-evaluate if user never allowed and selects manually
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
-    if (selectedLocation) {
-        map.panTo(selectedLocation);
-    } else if (currentLocation) {
-        map.panTo(currentLocation);
-    } else if (mapRef.current && defaultCenter) {
-        mapRef.current.panTo(defaultCenter); 
-    }
-  }, [selectedLocation, currentLocation]);
+  }, []);
 
   const onMarkerDragEnd = useCallback((event: google.maps.MapMouseEvent) => {
     if (event.latLng) {
@@ -189,11 +185,44 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   useEffect(() => {
     if (selectedLocation) {
       onLocationSelected(selectedLocation);
-      if (mapRef.current) {
-        mapRef.current.panTo(selectedLocation);
-      }
     }
   }, [selectedLocation, onLocationSelected]);
+
+  useEffect(() => {
+    getLocation();
+  }, [getLocation]); // getLocation is memoized
+
+  // Effect to adjust map view (zoom/center)
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+
+    if (selectedLocation && searchRadiusKm && searchRadiusKm > 0 && google.maps.geometry) {
+      const centerLatLng = new google.maps.LatLng(selectedLocation.lat, selectedLocation.lng);
+      const radiusInMeters = searchRadiusKm * 1000;
+
+      // Calculate NE and SW points for the bounding box using spherical geometry
+      const neBoundPoint = google.maps.geometry.spherical.computeOffset(centerLatLng, radiusInMeters * Math.sqrt(2), 45);
+      const swBoundPoint = google.maps.geometry.spherical.computeOffset(centerLatLng, radiusInMeters * Math.sqrt(2), 225);
+      
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend(neBoundPoint);
+      bounds.extend(swBoundPoint);
+      
+      map.fitBounds(bounds);
+    } else if (selectedLocation) {
+      map.panTo(selectedLocation);
+      // Set a reasonable default zoom if no radius is shown
+      if (map.getZoom() < 10 || map.getZoom() > 15 ) map.setZoom(13);
+    } else if (currentLocation) {
+      map.panTo(currentLocation);
+      map.setZoom(13);
+    } else {
+      map.panTo(defaultCenter);
+      map.setZoom(5); 
+    }
+  }, [selectedLocation, searchRadiusKm, isLoaded, currentLocation]);
+
 
   if (apiLoadError) {
     return (
@@ -204,7 +233,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  if (loading && !currentLocation && !error) {
+  if (loading && !currentLocation && !error && !selectedLocation) { // Adjusted loading condition
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
@@ -213,17 +242,16 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
 
-  if (!isLoaded && error) {
-    return (
+  if (!isLoaded && !apiLoadError) { // Show this if API hasn't loaded but no specific API error yet
+     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md text-center p-4">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
         <p className="text-foreground">Map is initializing...</p>
-        <p className="text-sm text-destructive mt-2">{error}</p>
-        <p className="text-xs text-muted-foreground mt-1">Attempting to load map with default location.</p>
+        {error && <p className="text-sm text-destructive mt-2">{error}</p>}
+        {!googleMapsApiKey && <p className="text-destructive text-sm mt-1">Google Maps API key missing.</p>}
       </div>
     );
   }
-
 
   return (
     <div className="relative h-[400px] w-full rounded-md overflow-hidden shadow-md border border-border">
@@ -232,7 +260,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={selectedLocation || currentLocation || defaultCenter}
-            zoom={13}
+            zoom={12} // Initial zoom, will be adjusted by fitBounds or setZoom in useEffect
             options={mapOptions}
             onLoad={onMapLoad}
             onClick={(e) => {
@@ -251,7 +279,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             {selectedLocation && searchRadiusKm && searchRadiusKm > 0 && (
               <Circle
                 center={selectedLocation}
-                radius={searchRadiusKm * 1000} // Convert km to meters
+                radius={searchRadiusKm * 1000} 
                 options={circleOptions}
               />
             )}
@@ -283,6 +311,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           <p className="text-foreground">Initializing map...</p>
           {!googleMapsApiKey && <p className="text-destructive text-sm mt-1">Google Maps API key missing.</p>}
           {apiLoadError && <p className="text-destructive text-sm mt-1">Failed to load Google Maps script: {apiLoadError.message}</p>}
+           {error && <p className="text-sm text-destructive mt-2">{error}</p>}
         </div>
       )}
     </div>
@@ -290,4 +319,3 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 };
 
 export default GoogleMapComponent;
-
