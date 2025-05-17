@@ -8,6 +8,8 @@ import {
   query,
   orderBy,
   getDocs,
+  doc,
+  deleteDoc,
   Timestamp,
 } from "firebase/firestore";
 import Link from "next/link";
@@ -15,6 +17,17 @@ import Link from "next/link";
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/lib/firebaseAuthService";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -47,6 +60,9 @@ const SavedRoutesPage = () => {
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(true);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const { toast } = useToast();
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [routeToDeleteId, setRouteToDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthUserChanged((user) => {
@@ -108,6 +124,49 @@ const SavedRoutesPage = () => {
     }
   };
 
+  const handleDeleteClick = (routeId: string) => {
+    setRouteToDeleteId(routeId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!routeToDeleteId || !currentUser || !db) {
+      toast({
+        title: "Error",
+        description: "Could not delete route. Missing information.",
+        variant: "destructive",
+      });
+      setIsDeleteDialogOpen(false);
+      setRouteToDeleteId(null);
+      return;
+    }
+
+    try {
+      const routeDocRef = doc(db, "users", currentUser.uid, "savedRoutes", routeToDeleteId);
+      await deleteDoc(routeDocRef);
+
+      setSavedRoutes((prevRoutes) =>
+        prevRoutes.filter((route) => route.id !== routeToDeleteId)
+      );
+
+      toast({
+        title: "Route Deleted",
+        description: "The route has been successfully deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting route:", error);
+      toast({
+        title: "Delete Error",
+        description: "Failed to delete route. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setRouteToDeleteId(null);
+    }
+  };
+
+
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-8">
@@ -133,80 +192,109 @@ const SavedRoutesPage = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
-      <Toaster />
-      <header className="w-full max-w-4xl mx-auto mb-8">
-        <div className="flex items-center justify-between">
-            <h1 className="text-4xl font-bold text-primary">My Saved Routes</h1>
-            <Button asChild variant="outline">
-              <Link href="/"><Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Home</Link>
-            </Button>
-        </div>
-      </header>
-
-      <div className="container mx-auto max-w-2xl">
-        {loadingRoutes && (
-          <div className="space-y-4">
-            <Skeleton className="h-[150px] w-full rounded-lg" />
-            <Skeleton className="h-[150px] w-full rounded-lg" />
-            <Skeleton className="h-[150px] w-full rounded-lg" />
+    <>
+      <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
+        <Toaster />
+        <header className="w-full max-w-4xl mx-auto mb-8">
+          <div className="flex items-center justify-between">
+              <h1 className="text-4xl font-bold text-primary">My Saved Routes</h1>
+              <Button asChild variant="outline">
+                <Link href="/"><Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Home</Link>
+              </Button>
           </div>
-        )}
+        </header>
 
-        {!loadingRoutes && savedRoutes.length === 0 && (
-          <div className="text-center py-10">
-            <Icons.list className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <p className="text-xl text-muted-foreground">
-              No saved routes yet.
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Go back to the homepage to generate and save new routes!
-            </p>
-          </div>
-        )}
+        <div className="container mx-auto max-w-2xl">
+          {loadingRoutes && (
+            <div className="space-y-4">
+              <Skeleton className="h-[150px] w-full rounded-lg" />
+              <Skeleton className="h-[150px] w-full rounded-lg" />
+              <Skeleton className="h-[150px] w-full rounded-lg" />
+            </div>
+          )}
 
-        {!loadingRoutes && savedRoutes.length > 0 && (
-          <div className="space-y-6">
-            {savedRoutes.map((route) => (
-              <Card key={route.id} className="bg-card shadow-lg rounded-lg">
-                <CardHeader>
-                  <CardTitle className="text-primary">{route.routeName}</CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Saved on: {new Date(route.timestamp.toDate()).toLocaleDateString()}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-foreground">
-                    Distance: {route.routeData.distance.toFixed(2)} km
-                  </p>
-                  <p className="text-sm text-foreground">
-                    Estimated Duration: {route.routeData.estimatedTime.toFixed(0)} min
-                  </p>
-                </CardContent>
-                <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
-                  <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
-                    <a href={route.sharedUrl} target="_blank" rel="noopener noreferrer">
-                      <Icons.externalLink className="mr-2 h-4 w-4" /> Open in Google Maps
-                    </a>
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={() => handleShareRoute(route.sharedUrl)} 
-                      variant="outline" 
-                      className="hover:bg-secondary/80"
-                    >
-                      <Icons.share className="mr-2 h-4 w-4" /> Share
+          {!loadingRoutes && savedRoutes.length === 0 && (
+            <div className="text-center py-10">
+              <Icons.list className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <p className="text-xl text-muted-foreground">
+                No saved routes yet.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Go back to the homepage to generate and save new routes!
+              </p>
+            </div>
+          )}
+
+          {!loadingRoutes && savedRoutes.length > 0 && (
+            <div className="space-y-6">
+              {savedRoutes.map((route) => (
+                <Card key={route.id} className="bg-card shadow-lg rounded-lg">
+                  <CardHeader>
+                    <CardTitle className="text-primary">{route.routeName}</CardTitle>
+                    <CardDescription className="text-muted-foreground">
+                      Saved on: {new Date(route.timestamp.toDate()).toLocaleDateString()}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-foreground">
+                      Distance: {route.routeData.distance.toFixed(2)} km
+                    </p>
+                    <p className="text-sm text-foreground">
+                      Estimated Duration: {route.routeData.estimatedTime.toFixed(0)} min
+                    </p>
+                  </CardContent>
+                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
+                    <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
+                      <a href={route.sharedUrl} target="_blank" rel="noopener noreferrer">
+                        <Icons.externalLink className="mr-2 h-4 w-4" /> Open in Google Maps
+                      </a>
                     </Button>
-                    {/* TODO: Add Delete button later */}
-                  </div>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-        )}
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => handleShareRoute(route.sharedUrl)} 
+                        variant="outline" 
+                        className="hover:bg-secondary/80"
+                      >
+                        <Icons.share className="mr-2 h-4 w-4" /> Share
+                      </Button>
+                       <Button 
+                        onClick={() => handleDeleteClick(route.id)} 
+                        variant="destructive" 
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        <Icons.trash className="mr-2 h-4 w-4" /> Delete
+                      </Button>
+                    </div>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this saved route.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRouteToDeleteId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 
 export default SavedRoutesPage;
+
