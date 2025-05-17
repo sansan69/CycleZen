@@ -59,7 +59,7 @@ export async function getCyclingRoutes(
   const maxTriesPerRoute = 2; // Try a couple of times per route if random points fail
 
   if (!apiKey) {
-    console.error("OpenRouteService API key is missing in environment variables.");
+    console.error("OpenRouteService API key is missing. Please configure it to use the map.");
     // Optionally throw an error or return an empty array with a user-facing message source
     throw new Error("OpenRouteService API key is not configured.");
   }
@@ -110,7 +110,6 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
         "seed": Math.floor(Math.random() * 1000) // Add randomness to ORS generation
       },
       "avoid_features": ["fords", "ferries"], // Keep dead_ends avoidance if desired, but it might be too restrictive. ORS default usually handles this well.
-      "instructions": false, // We don't need turn-by-turn instructions for display
       "preference": "recommended", // Or 'fastest', 'shortest'
     },
     "geometry_simplify": "true", // Simplify geometry to reduce payload
