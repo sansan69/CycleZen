@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider"; // Import Slider
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
@@ -161,7 +162,7 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates,
+        coordinates: route.coordinates, // This is Firestore compatible: array of {lat, lng} objects
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -257,7 +258,7 @@ const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const PWA_PROMPT_LS_KEY = 'hasSeenPWAInstallPrompt';
 
 const HomePage = () => {
-  const [radius, setRadius] = useState<string>("5"); // Store as string for input flexibility
+  const [radius, setRadius] = useState<string>("5"); 
   const [showMapInput, setShowMapInput] = useState<boolean>(true);
   const [routes, setRoutes] = useState<CyclingRoute[] | null>(null);
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
@@ -313,7 +314,6 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // authLoading will remain true to disable auth buttons if critical config is missing
         return; 
     }
     
@@ -344,7 +344,7 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
-      if (error.code === 'auth/unauthorized-domain') {
+       if (error.code === 'auth/unauthorized-domain') {
         const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
         const configuredAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set in .env.local';
         let hostnameToAdd = 'localhost'; 
@@ -385,7 +385,7 @@ const HomePage = () => {
   };
 
   const isRadiusValid = (r: string): boolean => {
-    if (r === "") return false; // Empty is not valid for generation
+    if (r === "") return false; 
     const num = parseInt(r, 10);
     return !isNaN(num) && num >= 5 && num <= 100;
   };
@@ -467,6 +467,10 @@ const HomePage = () => {
     previousSelectedLocationRef.current = selectedLocation; 
   }, [selectedLocation, toast]); 
 
+  const currentRadiusValue = parseInt(radius, 10);
+  const displayRadius = !isNaN(currentRadiusValue) && currentRadiusValue >=5 && currentRadiusValue <=100 ? currentRadiusValue : (radius === "" ? "" : 5);
+
+
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
@@ -502,7 +506,6 @@ const HomePage = () => {
         </AlertDialogContent>
       </AlertDialog>
       
-      {/* Hero Section */}
       <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
         <Image
           src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy"
@@ -565,31 +568,44 @@ const HomePage = () => {
               >
                 Radius for route length (km)
               </label>
-              <Input
-                type="text" // Use text to allow empty string and manage parsing
-                id="radius"
-                value={radius}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Allow only digits or empty string during typing
-                  if (value === "" || /^\d*$/.test(value)) {
-                    setRadius(value);
-                  }
-                }}
-                onBlur={() => {
-                  if (radius === "") { // If user made it empty and blurred
-                    return; // Keep it empty
-                  }
-                  const num = parseInt(radius, 10);
-                  if (isNaN(num) || num < 5 || num > 100) {
-                    setRadius(""); // Reset to empty if invalid number or out of range
-                  } else {
-                    setRadius(String(num)); // Normalize (e.g. "05" to "5") and keep if valid
-                  }
-                }}
-                placeholder="e.g., 10"
-                className="bg-background border-input focus:ring-primary focus:border-primary rounded-md"
-              />
+              <div className="flex items-center gap-4">
+                <Input
+                  type="text" 
+                  id="radius"
+                  value={radius}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "" || /^\d*$/.test(value)) {
+                      setRadius(value);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (radius === "") { 
+                      return; 
+                    }
+                    const num = parseInt(radius, 10);
+                    if (isNaN(num) || num < 5 || num > 100) {
+                      setRadius(""); 
+                    } else {
+                      setRadius(String(num)); 
+                    }
+                  }}
+                  placeholder="5 - 100"
+                  className="w-24 bg-background border-input focus:ring-primary focus:border-primary rounded-md"
+                />
+                <Slider
+                  value={[isNaN(currentRadiusValue) || radius === "" ? 5 : Math.max(5, Math.min(100, currentRadiusValue))]}
+                  min={5}
+                  max={100}
+                  step={1}
+                  onValueChange={(newValue) => setRadius(String(newValue[0]))}
+                  className="flex-1"
+                  aria-label="Radius slider"
+                />
+                <span className="text-sm font-medium text-foreground w-12 text-right">
+                  {displayRadius}{radius !== "" ? " km" : ""}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Enter a radius between 5 and 100 km.
               </p>
@@ -650,6 +666,8 @@ const HomePage = () => {
 };
 
 export default HomePage;
+    
+
     
 
     
