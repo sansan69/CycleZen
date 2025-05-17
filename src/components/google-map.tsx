@@ -42,7 +42,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const { isLoaded, loadError: apiLoadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: googleMapsApiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES, // Use the constant here
+    libraries: GOOGLE_MAPS_LIBRARIES, 
   });
 
   useEffect(() => {
@@ -58,7 +58,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             const options: PositionOptions = {
               enableHighAccuracy: true,
-              timeout: 5000,
+              timeout: 10000, // Increased timeout slightly
               maximumAge: 0,
             };
             
@@ -70,13 +70,25 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         setCurrentLocation({ lat: latitude, lng: longitude });
         setSelectedLocation({ lat: latitude, lng: longitude }); 
       } catch (err: any) {
-        console.error('Error getting location:', err.message);
+        console.error('Error getting location:', err.message, err.code, err.name);
         setError(err.message);
+        let toastDescription = "Could not retrieve your location. Please manually select a location or check permissions.";
+        
+        if (err.code === 1 || (err.message && (err.message.toLowerCase().includes("permission denied") || err.message.toLowerCase().includes("permissions policy")))) {
+            toastDescription = "Location access denied. Please check your browser and operating system location settings and grant permission to this site. You can still manually select a location on the map.";
+        } else if (err.code === 2) {
+            toastDescription = "Location information is unavailable. Please try again or select a location manually.";
+        } else if (err.code === 3) {
+            toastDescription = "Getting location timed out. Please try again or select a location manually.";
+        } else if (err.message) {
+            toastDescription = err.message;
+        }
+
         toast({
           title: "Location Error",
-          description:
-            err.message || "Could not retrieve your location. Please manually select a location or check permissions.",
+          description: toastDescription,
           variant: "destructive",
+          duration: 7000,
         });
         setCurrentLocation(defaultCenter);
         setSelectedLocation(defaultCenter);
@@ -144,10 +156,10 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   
   if (error && !currentLocation) {
      return (
-        <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10 h-[400px] w-full flex flex-col items-center justify-center">
-          <p>Error: {error}</p>
-          <p className="text-sm">Please ensure location services are enabled and permissions are granted for this site.</p>
-          <p className="text-sm mt-2">You can still manually select a location by dragging the marker if the map loads.</p>
+        <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10 h-[400px] w-full flex flex-col items-center justify-center text-center">
+          <p className="font-semibold">Map Error: {error}</p>
+          <p className="text-sm mt-2">Please ensure location services are enabled and permissions are granted for this site in your browser and OS settings.</p>
+          <p className="text-sm mt-1">You can still manually select a location by dragging the marker if the map loads with a default location.</p>
            {isLoaded && (
              <div className="mt-4 text-foreground">Loading map with default location...</div>
            )}
@@ -157,7 +169,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
 
   return (
-    <div className="relative h-[400px] w-full rounded-md overflow-hidden shadow-md">
+    <div className="relative h-[400px] w-full rounded-md overflow-hidden shadow-md border border-border">
       {isLoaded && (currentLocation || selectedLocation) ? (
         <>
           <GoogleMap
@@ -203,18 +215,27 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
                             setLoading(false);
                         },
                         (err) => {
-                            console.error('Error re-getting location:', err.message);
+                            console.error('Error re-getting location:', err.message, err.code);
                             setError(err.message);
+                            let toastDescription = "Could not retrieve your location. Please check permissions.";
+                             if (err.code === 1 || (err.message && (err.message.toLowerCase().includes("permission denied") || err.message.toLowerCase().includes("permissions policy")))) {
+                                toastDescription = "Location access denied. Please check your browser and OS settings.";
+                            } else if (err.code === 2) {
+                                toastDescription = "Location information is unavailable.";
+                            } else if (err.code === 3) {
+                                toastDescription = "Getting location timed out.";
+                            }
                              toast({
                                 title: "Location Error",
-                                description: err.message || "Could not retrieve your location. Please check permissions.",
+                                description: toastDescription,
                                 variant: "destructive",
+                                duration: 7000,
                             });
                             setLoading(false);
-                            if (!currentLocation) setCurrentLocation(defaultCenter);
-                            if (!selectedLocation) setSelectedLocation(defaultCenter);
+                            if (!currentLocation) setCurrentLocation(defaultCenter); // Fallback if never got location
+                            if (!selectedLocation) setSelectedLocation(defaultCenter); // Fallback if never selected one
                         },
-                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                     );
                 }
             }}
