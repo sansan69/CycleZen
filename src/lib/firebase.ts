@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getFirestore, Firestore } from "firebase/firestore";
 import { getAuth, Auth } from "firebase/auth";
@@ -20,19 +21,35 @@ try {
     app = getApps()[0];
   }
 } catch (e: any) {
-  console.error("Firebase initialization error:", e.message);
-  throw e; // Re-throw to prevent the app from running with a misconfigured Firebase
+  console.error("Firebase initialization error (initializeApp):", e.message, "Config used:", firebaseConfig);
+  // It's critical to throw here if initializeApp fails, as db and auth depend on it.
+  throw new Error(`Firebase failed to initialize. Please check your Firebase config and ensure all NEXT_PUBLIC_FIREBASE_ environment variables are set correctly. Original error: ${e.message}`);
 }
 
 const db: Firestore = getFirestore(app);
-let auth: Auth;
+let auth: Auth | undefined = undefined; // Initialize as undefined
 
-if (process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
-  auth = getAuth(app);
+// Only attempt to initialize auth if the API key is present and valid.
+const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+if (typeof apiKey === 'string' && apiKey.trim() !== '') {
+  try {
+    auth = getAuth(app);
+  } catch (e: any) {
+    // This catch block might be hit if getAuth(app) fails for reasons other than a missing key,
+    // e.g., if 'app' is somehow invalid or there are other config issues not caught by initializeApp.
+    console.error(
+      "Firebase getAuth(app) failed unexpectedly. API key was present but an error occurred:",
+      e.message,
+      "Firebase App Project ID:", app?.options?.projectId
+    );
+    // auth remains undefined
+  }
 } else {
-  console.warn("Firebase API key is missing. Authentication will not be available.");
-  // Provide a fallback or dummy object if auth is not initialized.
-  auth = {} as Auth;
+  console.warn(
+    "Firebase API key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing or empty in environment variables. " +
+    "Firebase Authentication will not be available. Ensure the .env file is correctly set up with NEXT_PUBLIC_FIREBASE_API_KEY and the server was restarted."
+  );
+  // auth remains undefined
 }
 
 export { app, db, auth };
