@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 
-import { db } from "@/lib/firebase";
+import { db } from "@/lib/firebase"; 
 import { 
   signInWithGoogle, 
   signOutUser, 
@@ -122,7 +122,7 @@ const RouteDisplay = ({
 
     if (waypointsForGoogleMaps.length > MAX_GOOGLE_MAPS_WAYPOINTS) {
         const start = waypointsForGoogleMaps[0];
-        const end = waypointsForGoogleMaps[waypointsForGoogleMaps.length-1];
+        const end = waypointsForGoogleMaps[waypointsForGoogleMaps.length -1];
         const intermediate = waypointsForGoogleMaps.slice(1, -1);
         const trimmedIntermediate = intermediate.filter((_,idx) => idx % (Math.floor(intermediate.length / (MAX_GOOGLE_MAPS_WAYPOINTS -2)) || 1) === 0).slice(0,MAX_GOOGLE_MAPS_WAYPOINTS-2);
         waypointsForGoogleMaps = [start, ...trimmedIntermediate, end];
@@ -315,7 +315,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(false); // Allow UI to render without auth
+        // setAuthLoading(false); // Keep authLoading true to disable auth buttons
         return; 
     }
     
@@ -502,7 +502,7 @@ const HomePage = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={handleDismissInstallPrompt} className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <AlertDialogAction onClick={handleDismissInstallPrompt} variant="accent">
               Okay, Got It!
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -637,7 +637,8 @@ const HomePage = () => {
             <Button 
               onClick={handleGenerateRoutes} 
               disabled={loadingRoutes || !selectedLocation || !isRadiusValid(radius)} 
-              className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              variant="accent"
+              className="w-full"
             >
               {loadingRoutes ? (
                 <><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
@@ -675,4 +676,5 @@ export default HomePage;
     
 
     
+
 

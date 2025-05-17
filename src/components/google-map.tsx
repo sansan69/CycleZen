@@ -19,7 +19,6 @@ const defaultCenter: Coordinate = {
   lng: -118.243683,
 };
 
-// Add 'geometry' library for spherical calculations
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
@@ -71,20 +70,19 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         duration: 10000,
       });
       setCurrentLocation(defaultCenter);
-      setSelectedLocation(defaultCenter); // Set a default selected location as well
+      setSelectedLocation(defaultCenter);
       setLoading(false);
       return;
     }
 
     if (!isLoaded) {
-      // Wait for API to load
       setLoading(false); 
       return;
     }
     
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser.');
-      toast({ title: "Geolocation Error", description: "Geolocation is not supported by your browser. Please select a location manually.", variant: "destructive", duration: 7000 });
+      toast({ title: "Geolocation Error", description: "Geolocation is not supported. Please select a location manually.", variant: "destructive", duration: 7000 });
       setCurrentLocation(defaultCenter);
       setSelectedLocation(defaultCenter);
       setLoading(false);
@@ -109,7 +107,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         } else if (permissionStatus.state === 'prompt') {
           toast({
             title: "Location Access",
-            description: "CycleZen needs your location to enhance your experience. Please grant permission when prompted.",
+            description: "CycleZen needs your location. Please grant permission when prompted by your browser.",
             duration: 7000,
           });
         }
@@ -131,7 +129,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       const { latitude, longitude } = position.coords;
       const fetchedLocation = { lat: latitude, lng: longitude };
       setCurrentLocation(fetchedLocation);
-      if (!selectedLocation) { // Only set selectedLocation if it's not already set by user interaction
+      if (!selectedLocation) { 
           setSelectedLocation(fetchedLocation);
       }
     } catch (err: any) {
@@ -142,7 +140,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       
       if (err.code === 1) { 
           toastTitle = "Location Access Denied";
-          toastDescription = "Location access was denied. Please enable it in your browser/OS settings and grant permission to CycleZen. You can still manually select a location.";
+          toastDescription = "Location access denied. Please enable it in your browser/OS settings and grant permission to CycleZen. You can still manually select a location.";
       } else if (err.code === 2) { 
           toastTitle = "Location Services Off?";
           toastDescription = "Could not determine your location. Please ensure your device's GPS/location services are turned on and try again. You can still manually select a location.";
@@ -160,7 +158,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         variant: "destructive",
         duration: 10000,
       });
-      // Only set default if no location was ever selected/current
       if (!currentLocation && !selectedLocation) {
         setCurrentLocation(defaultCenter); 
         setSelectedLocation(defaultCenter); 
@@ -168,7 +165,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [toast, googleMapsApiKey, isLoaded, selectedLocation]); // Added selectedLocation to re-evaluate if user never allowed and selects manually
+  }, [toast, googleMapsApiKey, isLoaded, selectedLocation]); 
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -190,9 +187,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
   useEffect(() => {
     getLocation();
-  }, [getLocation]); // getLocation is memoized
+  }, [getLocation]); 
 
-  // Effect to adjust map view (zoom/center)
   useEffect(() => {
     if (!isLoaded || !mapRef.current) return;
     const map = mapRef.current;
@@ -200,8 +196,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     if (selectedLocation && searchRadiusKm && searchRadiusKm > 0 && google.maps.geometry) {
       const centerLatLng = new google.maps.LatLng(selectedLocation.lat, selectedLocation.lng);
       const radiusInMeters = searchRadiusKm * 1000;
-
-      // Calculate NE and SW points for the bounding box using spherical geometry
+      
       const neBoundPoint = google.maps.geometry.spherical.computeOffset(centerLatLng, radiusInMeters * Math.sqrt(2), 45);
       const swBoundPoint = google.maps.geometry.spherical.computeOffset(centerLatLng, radiusInMeters * Math.sqrt(2), 225);
       
@@ -212,7 +207,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       map.fitBounds(bounds);
     } else if (selectedLocation) {
       map.panTo(selectedLocation);
-      // Set a reasonable default zoom if no radius is shown
       if (map.getZoom() < 10 || map.getZoom() > 15 ) map.setZoom(13);
     } else if (currentLocation) {
       map.panTo(currentLocation);
@@ -233,7 +227,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  if (loading && !currentLocation && !error && !selectedLocation) { // Adjusted loading condition
+  if (loading && !currentLocation && !error && !selectedLocation) { 
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
@@ -242,7 +236,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
 
-  if (!isLoaded && !apiLoadError) { // Show this if API hasn't loaded but no specific API error yet
+  if (!isLoaded && !apiLoadError) { 
      return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md text-center p-4">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
@@ -260,7 +254,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={selectedLocation || currentLocation || defaultCenter}
-            zoom={12} // Initial zoom, will be adjusted by fitBounds or setZoom in useEffect
+            zoom={12} 
             options={mapOptions}
             onLoad={onMapLoad}
             onClick={(e) => {
@@ -298,7 +292,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           <Button 
             variant="outline"
             size="sm"
-            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm hover:bg-background"
+            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm"
             onClick={getLocation} 
             disabled={loading}
             >
