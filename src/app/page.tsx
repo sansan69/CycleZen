@@ -329,15 +329,16 @@ const HomePage = () => {
             }
         }
         
-        description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
+        description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. Current Origin: ${currentOrigin}. Configured Auth Domain: ${configuredAuthDomain}.
         \nTroubleshooting steps:
-        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed. The current origin is: ${window.location.origin}. The auth domain from env is: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}.
+        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
         \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
         \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive" });
-      setAuthLoading(false); 
+    } finally {
+        setAuthLoading(false);
     }
   };
 
@@ -350,7 +351,8 @@ const HomePage = () => {
     } catch (error: any) {      
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); 
+    } finally {
+        setAuthLoading(false); 
     }
   };
 
@@ -429,14 +431,14 @@ const HomePage = () => {
       {/* Hero Section */}
       <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
         <Image
-          src="https://placehold.co/1200x600.png" // More typical hero aspect ratio
+          src="https://placehold.co/1200x600.png" 
           alt="Cyclist riding on a scenic route at sunset"
           fill
           style={{ objectFit: 'cover' }}
-          priority // Important for LCP
+          priority 
           data-ai-hint="cycling sunset"
         />
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 p-4">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 p-4">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight">
             CycleZen
           </h1>
