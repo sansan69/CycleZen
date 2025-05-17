@@ -4,19 +4,19 @@
 import GoogleMapComponent from "@/components/google-map";
 import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
 import { useState, useEffect, useCallback, useRef } from "react";
+import type { User } from "firebase/auth";
 import {
   collection,
   addDoc,
 } from "firebase/firestore";
-import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-  User,
-} from "firebase/auth";
 
-import { app, db, auth as firebaseAuth } from "@/lib/firebase.ts";
+import { db } from "@/lib/firebase.ts";
+import { 
+  signInWithGoogle, 
+  signOutUser, 
+  onAuthUserChanged 
+} from "@/lib/firebaseAuthService";
+
 import {
   Card,
   CardContent,
@@ -248,103 +248,70 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true); 
 
   useEffect(() => {
+    // Check for critical Firebase config on client side.
+    // These checks are primarily for developer feedback during setup.
     const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
     const projectIdMissing = !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID.trim() === '';
 
     if (apiKeyMissing || projectIdMissing) {
-      let missing = [];
-      if (apiKeyMissing) missing.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
-      if (projectIdMissing) missing.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
-      const message = `${missing.join(" and ")} is missing or empty. Authentication is unavailable.`;
-      toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
-      console.error(`CRITICAL: ${message}`);
-      // authLoading remains true to disable auth buttons
-      return;
-    }
-
-    if (!firebaseAuth) {
-      toast({ title: "Authentication Error", description: "Firebase Auth service (firebaseAuth) is undefined. This could be due to an initialization error in firebase.ts. Check console for logs from firebase.ts.", variant: "destructive" });
-      console.error("CRITICAL: firebaseAuth is undefined. Firebase Auth failed to initialize. Check firebase.ts logs. Imported firebaseAuth:", firebaseAuth);
-      // authLoading remains true
-      return;
-    }
-
-    if (typeof firebaseAuth.onAuthStateChanged !== 'function' || !firebaseAuth.app) {
-      toast({ title: "Authentication Error", description: "Firebase Auth service is not a valid Auth instance (onAuthStateChanged or .app missing). Check Firebase initialization in firebase.ts.", variant: "destructive" });
-      console.error("CRITICAL: firebaseAuth is not a valid Auth instance (onAuthStateChanged or .app missing). Imported firebaseAuth:", firebaseAuth, "App options:", firebaseAuth?.app?.options, "typeof .onAuthStateChanged:", typeof firebaseAuth.onAuthStateChanged);
-       // authLoading remains true
-      return;
+        let missing = [];
+        if (apiKeyMissing) missing.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
+        if (projectIdMissing) missing.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
+        const message = `${missing.join(" and ")} is missing or empty. Authentication is unavailable.`;
+        toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
+        console.error(`CRITICAL: ${message}`);
+        // authLoading remains true to disable auth buttons
+        // setAuthLoading(false); // DO NOT set to false if critical config is missing
+        return; 
     }
     
-    console.log('Firebase SDK appears initialized. Project ID used by client:', firebaseAuth.app.options?.projectId);
-    console.log('page.tsx useEffect: firebaseAuth type is', typeof firebaseAuth, 'typeof firebaseAuth.signInWithPopup is', typeof firebaseAuth.signInWithPopup);
+    // At this point, critical env vars seem to be present.
+    // onAuthUserChanged from firebaseAuthService will handle checking if firebaseAuth itself is initialized.
+    console.log('page.tsx useEffect: Subscribing to auth state changes.');
+    console.log('page.tsx useEffect: Project ID from env is:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+
+    const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false); 
+      setAuthLoading(false); // Auth state determined (or error handled by onAuthUserChanged)
       if (user) {
         console.log("User signed in:", user.uid);
       } else {
-        console.log("User signed out.");
+        console.log("User signed out or auth not initialized properly by service.");
       }
-    }, (error) => {
-        console.error("CRITICAL: Error in onAuthStateChanged listener:", error);
-        toast({ title: "Authentication State Error", description: "Could not determine authentication state. Please refresh.", variant: "destructive" });
-        setAuthLoading(false); 
     });
+    // onAuthUserChanged itself will log errors if firebaseAuth is not valid.
+    // It will also call the callback with null if auth cannot be setup, triggering "User signed out..."
 
     return () => unsubscribe();
   }, [toast]);
 
 
   const handleGoogleSignIn = async () => {
-    console.log("[handleGoogleSignIn] Attempting Google Sign-In.");
-    console.log("[handleGoogleSignIn] firebaseAuth object:", firebaseAuth);
-    if (firebaseAuth && firebaseAuth.signInWithPopup) {
-      console.log("[handleGoogleSignIn] typeof firebaseAuth.signInWithPopup:", typeof firebaseAuth.signInWithPopup);
-    } else {
-      console.log("[handleGoogleSignIn] firebaseAuth is falsy or firebaseAuth.signInWithPopup is not present.");
-    }
-
-    if (!firebaseAuth || typeof firebaseAuth.signInWithPopup !== 'function') {
-      toast({ title: "Authentication Error", description: "Firebase Auth not properly initialized. Cannot sign in. Check console for 'CRITICAL' messages.", variant: "destructive" });
-      console.error("handleGoogleSignIn: firebaseAuth not properly initialized or is not a valid Auth instance. typeof .signInWithPopup:", typeof firebaseAuth?.signInWithPopup, "firebaseAuth object:", firebaseAuth);
-      return;
-    }
-    const provider = new GoogleAuthProvider();
+    console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
+    setAuthLoading(true);
     try {
-      setAuthLoading(true);
-      await signInWithPopup(firebaseAuth, provider);
+      await signInWithGoogle();
       toast({ title: "Signed In", description: "Successfully signed in with Google." });
+      // onAuthUserChanged will update currentUser and setAuthLoading(false)
     } catch (error: any) {
-      console.error("Error signing in with Google:", error);
-      toast({ title: "Sign-in Error", description: `Code: ${error.code}\nMessage: ${error.message}`, variant: "destructive" });
-      setAuthLoading(false); 
-    } 
+      console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
+      toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`, variant: "destructive" });
+      setAuthLoading(false); // Ensure loading is false on error
+    }
   };
 
   const handleSignOut = async () => {
-    console.log("[handleSignOut] Attempting Sign-Out.");
-    console.log("[handleSignOut] firebaseAuth object:", firebaseAuth);
-    if (firebaseAuth && firebaseAuth.signOut) {
-      console.log("[handleSignOut] typeof firebaseAuth.signOut:", typeof firebaseAuth.signOut);
-    } else {
-      console.log("[handleSignOut] firebaseAuth is falsy or firebaseAuth.signOut is not present.");
-    }
-
-    if (!firebaseAuth || typeof firebaseAuth.signOut !== 'function') {
-      toast({ title: "Authentication Error", description: "Firebase Auth not properly initialized. Cannot sign out. Check console for 'CRITICAL' messages.", variant: "destructive" });
-      console.error("handleSignOut: firebaseAuth not properly initialized or is not a valid Auth instance. typeof .signOut:", typeof firebaseAuth?.signOut, "firebaseAuth object:", firebaseAuth);
-      return;
-    }
+    console.log("[handleSignOut] Attempting Sign-Out via service.");
+    setAuthLoading(true);
     try {
-      setAuthLoading(true);
-      await signOut(firebaseAuth);
+      await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
+      // onAuthUserChanged will update currentUser and setAuthLoading(false)
     } catch (error: any) {
-      console.error("Error signing out:", error);
+      console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); 
+      setAuthLoading(false); // Ensure loading is false on error
     }
   };
 
@@ -398,9 +365,10 @@ const HomePage = () => {
       setLoadingRoutes(false);
     }
   }, [selectedLocation, radius, toast]);
-
+  
   const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
+    // Toast is now handled in a separate useEffect
   }, []); 
 
   useEffect(() => {
