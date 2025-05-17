@@ -161,8 +161,8 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, // This is an array of {lat, lng} objects, which is Firestore-compatible
-        // Do NOT include route.geometry here if it contains nested arrays
+        coordinates: route.coordinates, 
+        // geometry: route.geometry, // Excluded due to Firestore nested array limitation
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -361,12 +361,12 @@ const HomePage = () => {
         
         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. Current Origin: ${currentOrigin}. Configured Auth Domain: ${configuredAuthDomain}.
         \nTroubleshooting steps:
-        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
+        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' (or the relevant domain) is listed.
         \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
         \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
       }
-      toast({ title: "Sign-in Error", description, variant: "destructive" });
+      toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
     } finally {
         setAuthLoading(false);
     }
@@ -492,7 +492,7 @@ const HomePage = () => {
       {/* Hero Section */}
       <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
         <Image
-          src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy" 
+          src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy"
           alt="Cyclist riding on a scenic route at sunset"
           fill
           style={{ objectFit: 'cover' }}
@@ -556,10 +556,33 @@ const HomePage = () => {
                 type="number"
                 id="radius"
                 value={radius}
-                onChange={(e) => setRadius(Math.max(1, Number(e.target.value)))}
-                placeholder="Enter radius in km"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow empty input for user to clear it
+                  if (value === "") {
+                    setRadius(5); // Or some default, or allow it to be temporarily invalid
+                    return;
+                  }
+                  const numValue = Number(value);
+                  if (!isNaN(numValue)) {
+                    // Clamp the value
+                    const clampedValue = Math.max(5, Math.min(100, numValue));
+                    setRadius(clampedValue);
+                  }
+                }}
+                onBlur={(e) => {
+                  // Ensure a valid number is set if input is blurred while invalid/empty
+                  const numValue = Number(e.target.value);
+                  if (isNaN(numValue) || numValue < 5) {
+                    setRadius(5);
+                  } else if (numValue > 100) {
+                    setRadius(100);
+                  }
+                }}
+                placeholder="Enter radius in km (5-100)"
                 className="bg-background border-input focus:ring-primary focus:border-primary rounded-md"
-                min="1"
+                min="5"
+                max="100"
               />
             </div>
 
@@ -614,6 +637,5 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
 
     
