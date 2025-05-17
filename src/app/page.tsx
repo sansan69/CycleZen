@@ -3,7 +3,7 @@
 
 import GoogleMapComponent from "@/components/google-map";
 import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   collection,
   addDoc,
@@ -115,7 +115,7 @@ const RouteDisplay = ({
         const start = waypointsForGoogleMaps[0];
         const end = waypointsForGoogleMaps[waypointsForGoogleMaps.length-1];
         const intermediate = waypointsForGoogleMaps.slice(1, -1);
-        const numToRemove = intermediate.length - (MAX_GOOGLE_MAPS_WAYPOINTS - 2);
+        // const numToRemove = intermediate.length - (MAX_GOOGLE_MAPS_WAYPOINTS - 2); // not used
         const trimmedIntermediate = intermediate.filter((_,idx) => idx % (Math.floor(intermediate.length / (MAX_GOOGLE_MAPS_WAYPOINTS -2)) || 1) === 0).slice(0,MAX_GOOGLE_MAPS_WAYPOINTS-2);
         waypointsForGoogleMaps = [start, ...trimmedIntermediate, end];
     }
@@ -248,9 +248,10 @@ const HomePage = () => {
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
   const { toast } = useToast();
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
+  const previousSelectedLocationRef = useRef<Coordinate | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(true); // Start as true
+  const [authLoading, setAuthLoading] = useState<boolean>(true); 
 
   useEffect(() => {
     const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
@@ -284,7 +285,7 @@ const HomePage = () => {
     console.log('Firebase SDK appears initialized. Project ID used by client:', firebaseAuth.app.options?.projectId);
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       setCurrentUser(user);
-      setAuthLoading(false); // Only set to false after onAuthStateChanged completes
+      setAuthLoading(false); 
       if (user) {
         console.log("User signed in:", user.uid);
       } else {
@@ -293,7 +294,7 @@ const HomePage = () => {
     }, (error) => {
         console.error("CRITICAL: Error in onAuthStateChanged listener:", error);
         toast({ title: "Authentication State Error", description: "Could not determine authentication state. Please refresh.", variant: "destructive" });
-        setAuthLoading(false); // Also set to false here to allow potential recovery or show login
+        setAuthLoading(false); 
     });
 
     return () => unsubscribe();
@@ -314,9 +315,8 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
       toast({ title: "Sign-in Error", description: `Code: ${error.code}\nMessage: ${error.message}`, variant: "destructive" });
-      setAuthLoading(false); // Reset on error
+      setAuthLoading(false); 
     } 
-    // authLoading will be set to false by onAuthStateChanged
   };
 
   const handleSignOut = async () => {
@@ -329,13 +329,11 @@ const HomePage = () => {
       setAuthLoading(true);
       await signOut(firebaseAuth);
       toast({ title: "Signed Out", description: "Successfully signed out." });
-      // setCurrentUser(null); // onAuthStateChanged will handle this
     } catch (error: any) {
       console.error("Error signing out:", error);
       toast({ title: "Sign-out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); // Reset on error
+      setAuthLoading(false); 
     }
-    // authLoading will be set to false by onAuthStateChanged
   };
 
 
@@ -390,16 +388,22 @@ const HomePage = () => {
   }, [selectedLocation, radius, toast]);
 
   const handleLocationSelected = useCallback((location: Coordinate) => {
-    setSelectedLocation(prevLocation => {
-      if (prevLocation?.lat !== location.lat || prevLocation?.lng !== location.lng) {
+    setSelectedLocation(location);
+  }, []); 
+
+  useEffect(() => {
+    if (selectedLocation) {
+      if (previousSelectedLocationRef.current &&
+          (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
+           previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
         toast({
           title: 'Location Updated',
-          description: `New location selected: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
+          description: `New location selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
         });
       }
-      return location;
-    });
-  }, [toast]); 
+      previousSelectedLocationRef.current = selectedLocation;
+    }
+  }, [selectedLocation, toast]);
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
