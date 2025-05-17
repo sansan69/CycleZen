@@ -161,7 +161,8 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates,
+        coordinates: route.coordinates, // This is an array of {lat, lng} objects, which is Firestore-compatible
+        // Do NOT include route.geometry here if it contains nested arrays
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -461,7 +462,7 @@ const HomePage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground">
-              <p>Get the best experience by adding CycleZen to your home screen.</p>
+              Get the best experience by adding CycleZen to your home screen.
               <div>
                 <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
                 <ol className="list-decimal list-inside pl-4">
