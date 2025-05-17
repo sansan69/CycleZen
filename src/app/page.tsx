@@ -170,7 +170,7 @@ const RouteDisplay = ({
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.includes("Nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). Please ensure route.geometry is not included in the save.";
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
       } else if (error.message) {
         description = error.message;
       }
@@ -431,12 +431,11 @@ const HomePage = () => {
       {/* Hero Section */}
       <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
         <Image
-          src="https://placehold.co/1200x600.png?text=" 
+          src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy" 
           alt="Cyclist riding on a scenic route at sunset"
           fill
           style={{ objectFit: 'cover' }}
-          priority 
-          data-ai-hint="cycling background"
+          priority
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/80 p-4">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight">
