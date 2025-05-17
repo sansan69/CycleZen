@@ -6,7 +6,6 @@ import type { User } from "firebase/auth";
 import {
   collection,
   query,
-  where,
   orderBy,
   getDocs,
   Timestamp,
@@ -92,6 +91,23 @@ const SavedRoutesPage = () => {
     }
   }, [currentUser, authLoading, toast]);
 
+  const handleShareRoute = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link Copied!",
+        description: "Route link copied to clipboard.",
+      });
+    } catch (err) {
+      console.error("Failed to copy link: ", err);
+      toast({
+        title: "Copy Error",
+        description: "Could not copy link to clipboard.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-8">
@@ -167,13 +183,22 @@ const SavedRoutesPage = () => {
                     Estimated Duration: {route.routeData.estimatedTime.toFixed(0)} min
                   </p>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
                   <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
                     <a href={route.sharedUrl} target="_blank" rel="noopener noreferrer">
                       <Icons.externalLink className="mr-2 h-4 w-4" /> Open in Google Maps
                     </a>
                   </Button>
-                  {/* TODO: Add Delete button later */}
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => handleShareRoute(route.sharedUrl)} 
+                      variant="outline" 
+                      className="hover:bg-secondary/80"
+                    >
+                      <Icons.share className="mr-2 h-4 w-4" /> Share
+                    </Button>
+                    {/* TODO: Add Delete button later */}
+                  </div>
                 </CardFooter>
               </Card>
             ))}
