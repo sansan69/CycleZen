@@ -163,6 +163,7 @@ const RouteDisplay = ({
         distance: route.distance,
         estimatedTime: route.estimatedTime,
         coordinates: route.coordinates,
+        // geometry: route.geometry, // Excluded due to Firestore nested array limitations
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -314,6 +315,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
+        setAuthLoading(false); // Allow UI to render without auth
         return; 
     }
     
@@ -569,7 +571,7 @@ const HomePage = () => {
               >
                 Radius for route length (km)
               </label>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Input
                   type="text" 
                   id="radius"
@@ -592,7 +594,7 @@ const HomePage = () => {
                     }
                   }}
                   placeholder="5 - 100"
-                  className="w-24 bg-background border-input focus:ring-primary focus:border-primary rounded-md"
+                  className="w-full sm:w-24 bg-background border-input focus:ring-primary focus:border-primary rounded-md"
                 />
                 <Slider
                   value={[isNaN(currentRadiusValue) || radius === "" ? 5 : Math.max(5, Math.min(100, currentRadiusValue))]}
@@ -600,10 +602,10 @@ const HomePage = () => {
                   max={100}
                   step={1}
                   onValueChange={(newValue) => setRadius(String(newValue[0]))}
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                   aria-label="Radius slider"
                 />
-                <span className="text-sm font-medium text-foreground w-12 text-right">
+                <span className="text-sm font-medium text-foreground w-full sm:w-12 text-center sm:text-right mt-2 sm:mt-0">
                   {displayRadius}{radius !== "" ? " km" : ""}
                 </span>
               </div>
@@ -673,3 +675,4 @@ export default HomePage;
     
 
     
+
