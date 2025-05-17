@@ -10,7 +10,7 @@ import {
   addDoc,
 } from "firebase/firestore";
 import Link from "next/link";
-import Image from "next/image"; // Import next/image
+import Image from "next/image";
 
 import { db } from "@/lib/firebase";
 import { 
@@ -33,6 +33,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import {
   GoogleMap,
@@ -43,7 +52,7 @@ import {
 const RouteDisplay = ({
   route,
   user,
-  selectedLocationForRouteName // Pass selectedLocation for route naming
+  selectedLocationForRouteName
 }: {
   route: CyclingRoute;
   user: User | null;
@@ -69,7 +78,7 @@ const RouteDisplay = ({
         lng: (minLng + maxLng) / 2,
       });
     } else {
-      setCenter({ lat: 0, lng: 0 }); // Fallback center
+      setCenter({ lat: 0, lng: 0 }); 
     }
   }, [route]);
 
@@ -152,8 +161,7 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, 
-        // geometry: route.geometry, // Excluded to prevent Firestore error
+        coordinates: route.coordinates,
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -169,8 +177,9 @@ const RouteDisplay = ({
     } catch (error: any) {
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
-      if (error.message && error.message.includes("Nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
+      // Check for the specific Firestore error related to nested arrays
+      if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). The raw geometry causing this has been excluded.";
       } else if (error.message) {
         description = error.message;
       }
@@ -246,6 +255,7 @@ const RouteDisplay = ({
 };
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+const PWA_PROMPT_LS_KEY = 'hasSeenPWAInstallPrompt';
 
 const HomePage = () => {
   const [radius, setRadius] = useState<number>(5);
@@ -257,7 +267,26 @@ const HomePage = () => {
   const previousSelectedLocationRef = useRef<Coordinate | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(true); 
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [showInstallPrompt, setShowInstallPrompt] = useState<boolean>(false);
+
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hasSeenPrompt = localStorage.getItem(PWA_PROMPT_LS_KEY);
+      if (!hasSeenPrompt) {
+        setShowInstallPrompt(true);
+      }
+    }
+  }, []);
+
+  const handleDismissInstallPrompt = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PWA_PROMPT_LS_KEY, 'true');
+    }
+    setShowInstallPrompt(false);
+  };
+
 
   useEffect(() => {
     const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -427,6 +456,37 @@ const HomePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
+      <AlertDialog open={showInstallPrompt} onOpenChange={setShowInstallPrompt}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground">
+              <p>Get the best experience by adding CycleZen to your home screen.</p>
+              <div>
+                <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
+                <ol className="list-decimal list-inside pl-4">
+                  <li>Tap the three dots (⋮) in the top-right corner of Chrome.</li>
+                  <li>Select "Install app" or "Add to Home screen".</li>
+                  <li>Follow the prompts.</li>
+                </ol>
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
+                <ol className="list-decimal list-inside pl-4">
+                  <li>Tap the "Share" icon (square with an arrow pointing up) at the bottom.</li>
+                  <li>Scroll down and tap "Add to Home Screen".</li>
+                  <li>Confirm by tapping "Add".</li>
+                </ol>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={handleDismissInstallPrompt} className="bg-accent text-accent-foreground hover:bg-accent/90">
+              Okay, Got It!
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       {/* Hero Section */}
       <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
@@ -436,6 +496,7 @@ const HomePage = () => {
           fill
           style={{ objectFit: 'cover' }}
           priority
+          data-ai-hint="cycle background"
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/80 p-4">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight">
@@ -553,3 +614,5 @@ const HomePage = () => {
 
 export default HomePage;
 
+
+    
