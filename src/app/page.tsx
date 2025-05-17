@@ -145,13 +145,16 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
+      // Prepare the route data, ensuring no nested arrays problematic for Firestore
+      const routeDataToSave = {
+        distance: route.distance,
+        estimatedTime: route.estimatedTime,
+        coordinates: route.coordinates, // This is Array<{lat:number, lng:number}> - OK
+        // geometry: route.geometry, // This was the issue as route.geometry (GeoJSON object) contains a nested array in its own 'coordinates' field
+      };
+
       await addDoc(userSavedRoutesCollection, {
-        routeData: {
-          distance: route.distance,
-          estimatedTime: route.estimatedTime,
-          coordinates: route.coordinates, 
-          geometry: route.geometry,
-        },
+        routeData: routeDataToSave,
         timestamp: new Date(),
         routeName: `Route near ${user.displayName || 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
@@ -160,11 +163,11 @@ const RouteDisplay = ({
         title: "Route Saved",
         description: `Route saved to your profile.`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving route:", error);
       toast({
         title: "Save Error",
-        description: "Failed to save route. Please try again.",
+        description: error.message || "Failed to save route. Please try again.",
         variant: "destructive",
       });
     }
@@ -251,14 +254,17 @@ const HomePage = () => {
     const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     const envProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const envAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+    const envStorageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    const envMessagingSenderId = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
+    const envAppId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
     console.log("--- Firebase Config from Client Environment ---");
     console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:", envAuthDomain ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", envStorageBucket ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "MISSING or Empty");
     console.log("----------------------------------------------");
     
     const apiKeyMissing = !envApiKey || envApiKey.trim() === '';
@@ -271,8 +277,8 @@ const HomePage = () => {
         if (projectIdMissing) missingVars.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
         if (authDomainMissing) missingVars.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
         
-        const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable.`;
-        toast({ title: "Configuration Error", description: `${message} Please check your .env.local file and restart the server.`, variant: "destructive", duration: Infinity });
+        const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
+        toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
         // authLoading remains true to disable auth buttons if critical config is missing
         return; 
@@ -309,15 +315,18 @@ const HomePage = () => {
       if (error.code === 'auth/unauthorized-domain') {
         const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
         const configuredAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set in .env.local';
-        let hostnameToAdd = 'localhost'; // Default for localhost
+        let hostnameToAdd = 'localhost'; 
         if (typeof window !== 'undefined' && currentOrigin !== 'unknown' && !currentOrigin.includes('localhost')) {
             try {
                 hostnameToAdd = new URL(currentOrigin).hostname;
             } catch (e) {
                 console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-                hostnameToAdd = currentOrigin; // Fallback if URL parsing fails
+                hostnameToAdd = currentOrigin;
             }
+        } else if (typeof window !== 'undefined' && currentOrigin.includes('localhost')) {
+            // For localhost, hostnameToAdd remains 'localhost'
         }
+
 
         description = `Error: Your app's current domain ('${currentOrigin}') is not authorized for Google Sign-In. 
         \nTroubleshooting steps:
@@ -399,6 +408,7 @@ const HomePage = () => {
 
   useEffect(() => {
     if (selectedLocation) {
+      // Only show toast if the location has actually changed from the previous one
       if (previousSelectedLocationRef.current &&
           (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
            previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
@@ -407,9 +417,10 @@ const HomePage = () => {
           description: `New location selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
         });
       }
+      // Update the ref to the current selected location for the next comparison
       previousSelectedLocationRef.current = selectedLocation;
     }
-  }, [selectedLocation, toast]);
+  }, [selectedLocation, toast]); // Depend on selectedLocation and toast
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
@@ -522,3 +533,4 @@ export default HomePage;
 
 
     
+
