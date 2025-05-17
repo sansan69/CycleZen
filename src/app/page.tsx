@@ -264,26 +264,22 @@ const HomePage = () => {
     const envMessagingSenderId = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
     const envAppId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
+    let missingVarsLog: string[] = [];
+    if (!envApiKey) missingVarsLog.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
+    if (!envProjectId) missingVarsLog.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
+    if (!envAuthDomain) missingVarsLog.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
+    // Optional vars, log if present or not for completeness
     console.log("--- Firebase Config from Client Environment ---");
     console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:", envAuthDomain ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", envStorageBucket ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", envStorageBucket ? "Present" : "Not Set (Optional)");
+    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "Not Set (Optional)");
+    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "Not Set (Optional)");
     console.log("----------------------------------------------");
     
-    const apiKeyMissing = !envApiKey || envApiKey.trim() === '';
-    const projectIdMissing = !envProjectId || envProjectId.trim() === '';
-    const authDomainMissing = !envAuthDomain || envAuthDomain.trim() === '';
-
-    if (apiKeyMissing || projectIdMissing || authDomainMissing) {
-        let missingVars: string[] = [];
-        if (apiKeyMissing) missingVars.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
-        if (projectIdMissing) missingVars.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
-        if (authDomainMissing) missingVars.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
-        
-        const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
+    if (missingVarsLog.length > 0) {
+        const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
         // authLoading remains true to disable auth buttons if critical config is missing
@@ -313,6 +309,7 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signInWithGoogle();
+      // onAuthUserChanged will update currentUser and setAuthLoading(false)
       toast({ title: "Signed In", description: "Successfully signed in with Google." });
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
@@ -326,10 +323,10 @@ const HomePage = () => {
                 hostnameToAdd = new URL(currentOrigin).hostname;
             } catch (e) {
                 console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-                hostnameToAdd = currentOrigin;
+                hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
             }
         } else if (typeof window !== 'undefined' && currentOrigin.includes('localhost')) {
-            // For localhost, hostnameToAdd remains 'localhost'
+           // For localhost, hostnameToAdd remains 'localhost'
         }
 
 
@@ -341,7 +338,7 @@ const HomePage = () => {
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive" });
-      setAuthLoading(false); 
+      setAuthLoading(false); // Ensure loading is set to false on error
     }
   };
 
@@ -350,8 +347,14 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signOutUser();
+      // onAuthUserChanged will update currentUser and setAuthLoading(false)
       toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {      
+      // onAuthUserChanged should still fire and setAuthLoading(false)
+      // but if signOutUser itself throws an error before onAuthUserChanged can react
+      // we need to ensure authLoading is false.
+      console.error("[handleSignOut] Error from signOutUser service:", error);
+      toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
       setAuthLoading(false); 
     }
   };
@@ -409,21 +412,20 @@ const HomePage = () => {
   
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     _setSelectedLocation(locationFromMap);
-    selectedLocation = locationFromMap; // Keep the global `selectedLocation` updated for RouteDisplay's handleSaveRoute
+    selectedLocation = locationFromMap; 
   }, []); 
 
   useEffect(() => {
-    if (_selectedLocation) {
-      if (previousSelectedLocationRef.current &&
-          (previousSelectedLocationRef.current.lat !== _selectedLocation.lat ||
-           previousSelectedLocationRef.current.lng !== _selectedLocation.lng)) {
+    if (_selectedLocation && previousSelectedLocationRef.current) { // Only toast if there was a previous location
+      if (previousSelectedLocationRef.current.lat !== _selectedLocation.lat ||
+          previousSelectedLocationRef.current.lng !== _selectedLocation.lng) {
         toast({
           title: 'Location Updated',
           description: `New location selected: ${_selectedLocation.lat.toFixed(4)}, ${_selectedLocation.lng.toFixed(4)}`,
         });
       }
-      previousSelectedLocationRef.current = _selectedLocation;
     }
+    previousSelectedLocationRef.current = _selectedLocation; // Update ref after potential toast or on first set
   }, [_selectedLocation, toast]); 
 
   return (
@@ -520,7 +522,7 @@ const HomePage = () => {
         )}
 
         {routes && !loadingRoutes && (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
              <Button onClick={() => { setShowMapInput(true); setRoutes(null); }} variant="outline" className="mb-4 flex items-center">
               <Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Location Select
             </Button>
@@ -535,3 +537,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+

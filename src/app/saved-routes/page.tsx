@@ -226,7 +226,7 @@ const SavedRoutesPage = () => {
           )}
 
           {!loadingRoutes && savedRoutes.length > 0 && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
               {savedRoutes.map((route) => (
                 <Card key={route.id} className="bg-card shadow-lg rounded-lg">
                   <CardHeader>

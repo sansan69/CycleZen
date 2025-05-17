@@ -3,24 +3,24 @@
 @tailwind utilities;
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* White */
+    --background: 0 0% 100%; /* White - For html element */
     --foreground: 0 0% 3.9%; /* Dark Gray */
-    --card: 0 0% 96.1%; /* Light Gray */
+    --card: 0 0% 100%; /* White - For card backgrounds */
     --card-foreground: 0 0% 3.9%; /* Dark Gray */
     --popover: 0 0% 100%; /* White */
     --popover-foreground: 0 0% 3.9%; /* Dark Gray */
-    --primary: 180 100% 25%; /* Teal */
+    --primary: 180 100% 25%; /* Teal #008080 */
     --primary-foreground: 0 0% 98%; /* White */
-    --secondary: 0 0% 96.1%; /* Light Gray */
+    --secondary: 0 0% 94.1%; /* Light Gray #F0F0F0 - For page backgrounds */
     --secondary-foreground: 0 0% 9%; /* Dark Gray */
     --muted: 0 0% 96.1%; /* Light Gray */
     --muted-foreground: 0 0% 45.1%; /* Medium Gray */
-    --accent: 39 100% 50%; /* Orange */
+    --accent: 39 100% 50%; /* Orange #FFA500 */
     --accent-foreground: 0 0% 9%; /* Dark Gray */
     --destructive: 0 84.2% 60.2%; /* Red */
     --destructive-foreground: 0 0% 98%; /* White */
@@ -45,13 +45,13 @@ body {
   .dark {
     --background: 0 0% 3.9%; /* Dark Gray */
     --foreground: 0 0% 98%; /* White */
-    --card: 0 0% 3.9%; /* Dark Gray */
+    --card: 0 0% 12%; /* Darker Gray for cards in dark mode */
     --card-foreground: 0 0% 98%; /* White */
     --popover: 0 0% 3.9%; /* Dark Gray */
     --popover-foreground: 0 0% 98%; /* White */
     --primary: 180 100% 25%; /* Teal */
     --primary-foreground: 0 0% 9%; /* Dark Gray */
-    --secondary: 0 0% 14.9%; /* Even Darker Gray */
+    --secondary: 0 0% 8%; /* Even Darker Gray for page background in dark mode */
     --secondary-foreground: 0 0% 98%; /* White */
     --muted: 0 0% 14.9%; /* Even Darker Gray */
     --muted-foreground: 0 0% 63.9%; /* Slightly Lighter Gray */
@@ -86,4 +86,3 @@ body {
     @apply bg-background text-foreground;
   }
 }
-
