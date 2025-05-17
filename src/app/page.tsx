@@ -260,7 +260,7 @@ const HomePage = () => {
     console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? "Present" : "MISSING or Empty");
     console.log("----------------------------------------------");
-
+    
     const apiKeyMissing = !envApiKey || envApiKey.trim() === '';
     const projectIdMissing = !envProjectId || envProjectId.trim() === '';
     const authDomainMissing = !envAuthDomain || envAuthDomain.trim() === '';
@@ -275,7 +275,6 @@ const HomePage = () => {
         toast({ title: "Configuration Error", description: `${message} Please check your .env.local file and restart the server.`, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
         // authLoading remains true to disable auth buttons if critical config is missing
-        // setAuthLoading(false) is NOT called here intentionally
         return; 
     }
     
@@ -308,7 +307,14 @@ const HomePage = () => {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
       if (error.code === 'auth/unauthorized-domain') {
-        description = "Error: This app's domain (e.g., localhost) is not authorized for Google Sign-In in your Firebase project, OR your app's configured `authDomain` may not match your Firebase project. Please verify: \n1. In Firebase console > Authentication > Settings > Authorized domains: ensure 'localhost' (or your app's domain) is listed. \n2. In your .env.local file: ensure `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` matches the Auth Domain in your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration). \n3. Restart your app server after any .env changes.";
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+        const configuredAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set in .env.local';
+        description = `Error: Your app's current domain ('${currentOrigin}') is not authorized for Google Sign-In for the Firebase project configured with Auth Domain '${configuredAuthDomain}'. 
+        \nTroubleshooting steps:
+        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${currentOrigin.includes('localhost') ? 'localhost' : currentOrigin}' is listed.
+        \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
+        \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
+        \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive" });
       setAuthLoading(false); 
@@ -505,3 +511,6 @@ export default HomePage;
 
     
 
+
+
+    
