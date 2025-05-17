@@ -16,7 +16,7 @@ const Icons = {
   home: Home,
   light: Sun,
   loader: Loader2,
-  locate: Locate, // Added Locate icon
+  locate: Locate,
   mail: Mail,
   messageSquare: MessageSquare,
   plus: Plus,
@@ -24,7 +24,7 @@ const Icons = {
   search: Search,
   server: Server,
   settings: Settings,
-  share: Share2,
+  share: Share2, // Added Share2 icon
   shield: Shield,
   spinner: Loader2,
   trash: Trash,

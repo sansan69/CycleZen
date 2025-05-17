@@ -20,7 +20,7 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
-import { Button as UiButton, Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
@@ -39,7 +39,7 @@ const RouteDisplay = ({
   user,
 }: {
   route: CyclingRoute;
-  user: any;
+  user: any; // This will eventually be a Firebase User object or similar
 }) => {
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
@@ -65,14 +65,14 @@ const RouteDisplay = ({
     }
   }, [route]);
 
-  const MAX_GOOGLE_MAPS_WAYPOINTS = 10; // Max waypoints for a clean Google Maps URL
+  const MAX_GOOGLE_MAPS_WAYPOINTS = 10; 
 
   let waypointsForGoogleMaps: Coordinate[] = [];
   if (route.coordinates && route.coordinates.length > 0) {
     if (route.coordinates.length <= MAX_GOOGLE_MAPS_WAYPOINTS) {
       waypointsForGoogleMaps = route.coordinates;
     } else {
-      waypointsForGoogleMaps.push(route.coordinates[0]); // Start point
+      waypointsForGoogleMaps.push(route.coordinates[0]); 
 
       const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2;
       const totalRoutePoints = route.coordinates.length;
@@ -80,21 +80,14 @@ const RouteDisplay = ({
 
       for (let i = 1; i <= numIntermediatePoints; i++) {
         const waypointIndex = i * step;
-        if (waypointIndex < totalRoutePoints -1) { // ensure not to pick the last point again
+        if (waypointIndex < totalRoutePoints -1) { 
            waypointsForGoogleMaps.push(route.coordinates[waypointIndex]);
         }
       }
-      waypointsForGoogleMaps.push(route.coordinates[totalRoutePoints - 1]); // End point
+      waypointsForGoogleMaps.push(route.coordinates[totalRoutePoints - 1]); 
     }
   }
   
-  const waypointsString = waypointsForGoogleMaps
-    .map(coord => `${coord.lat},${coord.lng}`)
-    .join('|');
-
-  // The destination is the last waypoint if multiple are provided, otherwise it's implicitly the end of the loop.
-  // For a round trip starting and ending at the first waypoint, we can simplify.
-  // Google Maps will try to create a route visiting all waypoints.
   const origin = waypointsForGoogleMaps.length > 0 ? `${waypointsForGoogleMaps[0].lat},${waypointsForGoogleMaps[0].lng}` : "";
   const destination = waypointsForGoogleMaps.length > 1 ? `${waypointsForGoogleMaps[waypointsForGoogleMaps.length - 1].lat},${waypointsForGoogleMaps[waypointsForGoogleMaps.length - 1].lng}` : origin;
   
@@ -106,7 +99,7 @@ const RouteDisplay = ({
 
 
   const handleSaveRoute = async () => {
-    if (!user) {
+    if (!user || !user.uid) { // Check for user and user.uid
       toast({
         title: "Authentication Required",
         description: "Please log in to save routes.",
@@ -118,12 +111,17 @@ const RouteDisplay = ({
     try {
       const docRef = await addDoc(collection(db, "routes"), {
         userId: user.uid,
-        routeData: route, // Save the full detailed route
+        routeData: { // Storing the structured route data
+          distance: route.distance,
+          estimatedTime: route.estimatedTime,
+          coordinates: route.coordinates,
+          geometry: route.geometry, // Save geometry if available
+        },
         timestamp: new Date(),
       });
       toast({
         title: "Route Saved",
-        description: `Route saved successfully with ID: ${docRef.id}`,
+        description: `Route saved successfully.`, // Simplified message
       });
     } catch (error) {
       console.error("Error saving route:", error);
@@ -134,6 +132,24 @@ const RouteDisplay = ({
       });
     }
   };
+
+  const handleShareRoute = async () => {
+    try {
+      await navigator.clipboard.writeText(routeUrl);
+      toast({
+        title: "Link Copied!",
+        description: "Route link copied to clipboard.",
+      });
+    } catch (err) {
+      console.error("Failed to copy link: ", err);
+      toast({
+        title: "Copy Error",
+        description: "Could not copy link to clipboard.",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   if (!center) {
     return <Skeleton className="h-[400px] w-full" />;
@@ -149,7 +165,6 @@ const RouteDisplay = ({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Check if googleMapsApiKey is available before rendering GoogleMap */}
         {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && center ? (
           <GoogleMap mapContainerStyle={mapStyles} zoom={10} center={center} >
             <Polyline path={route.coordinates} options={{ strokeColor: "#FF0000", strokeWeight: 2 }} />
@@ -158,11 +173,16 @@ const RouteDisplay = ({
           <Skeleton className="h-[300px] w-full" />
         )}
       </CardContent>
-      <CardFooter className="flex justify-between">
-        <Button asChild>
+      <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+        <Button asChild variant="outline">
           <a href={routeUrl} target='_blank' rel="noopener noreferrer">Open in Google Maps</a>
         </Button>
-        <UiButton onClick={handleSaveRoute} disabled={!user}>Save this route</UiButton>
+        <div className="flex gap-2">
+          <Button onClick={handleShareRoute} variant="outline">
+            <Icons.share className="mr-2 h-4 w-4" /> Share
+          </Button>
+          <Button onClick={handleSaveRoute} disabled={!user || !user.uid}>Save this route</Button>
+        </div>
       </CardFooter>
     </Card>
   );
@@ -177,6 +197,10 @@ const HomePage = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const { toast } = useToast();
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
+
+  // TODO: Replace with actual Firebase authentication state
+  const user = null; // Placeholder: Implement Firebase Auth to get the logged-in user
+                     // Example: const { user } = useAuth(); (if using a custom auth hook)
 
   const handleGenerateRoutes = useCallback(async () => {
     if (!selectedLocation) {
@@ -236,8 +260,6 @@ const HomePage = () => {
     });
   }, [toast]);
 
-  const user = null; 
-
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4">
       <Toaster />
@@ -264,7 +286,7 @@ const HomePage = () => {
                 onChange={(e) => setRadius(Number(e.target.value))}
                 placeholder="Enter radius in km"
                 className="bg-background border-input"
-                min="1" // Ensure radius is positive
+                min="1" 
               />
             </div>
 
@@ -283,7 +305,7 @@ const HomePage = () => {
             )}
 
 
-            <UiButton
+            <Button
               onClick={handleGenerateRoutes}
               disabled={loading || !selectedLocation}
               className="bg-accent hover:bg-accent/90 text-accent-foreground"
@@ -296,7 +318,7 @@ const HomePage = () => {
               ) : (
                 "Generate Routes"
               )}
-            </UiButton>
+            </Button>
           </CardContent>
         </Card>
 
@@ -340,7 +362,6 @@ const HomePage = () => {
 }
 
 export default function WrappedHomePage() {
-  // Ensure API key is present before attempting to load the script
   if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     return (
       <div className="flex justify-center items-center min-h-screen p-4">
@@ -362,4 +383,3 @@ export default function WrappedHomePage() {
     </LoadScript>
   );
 }
-
