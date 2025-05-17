@@ -58,7 +58,7 @@ export async function getCyclingRoutes(
   const maxTriesPerRoute = 2; // Try a couple of times per route if random points fail
 
   if (!apiKey) {
-    console.error("OpenRouteService API key is missing. Please configure it to use the map.");
+    console.error("OpenRouteService API key is missing. Please configure it.");
     // Optionally throw an error or return an empty array with a user-facing message source
     throw new Error("OpenRouteService API key is not configured.");
   }
@@ -104,7 +104,6 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
     },
     "preference": "recommended",
     "geometry_simplify": "true", // Simplify geometry to reduce payload
-    "maximum_speed": 40 // Cycling speed limit
   };
 
   const response = await fetch(url, {
@@ -162,5 +161,7 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
     distance: distanceKm,
     estimatedTime: durationMinutes,
     coordinates: routeCoordinates,
+    geometry: feature.geometry // Store the raw geometry as well
   };
 }
+
