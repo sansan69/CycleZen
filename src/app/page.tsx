@@ -244,29 +244,40 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Ensure firebaseAuth is initialized before using it
-    if (firebaseAuth && Object.keys(firebaseAuth).length > 0) {
+    // More robust check for firebaseAuth initialization
+    if (firebaseAuth && typeof firebaseAuth.onAuthStateChanged === 'function' && firebaseAuth.app) {
+      console.log('Firebase SDK initialized. Project ID used by client:', firebaseAuth.app.options?.projectId);
       const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
         setCurrentUser(user);
         setAuthLoading(false);
+        if (user) {
+          console.log("User signed in:", user.uid);
+        } else {
+          console.log("User signed out.");
+        }
       });
       return () => unsubscribe();
     } else {
-      // Handle the case where firebaseAuth might not be fully initialized
-      // This might happen if API keys are missing or there's an initialization error in firebase.ts
       setAuthLoading(false);
+      // This part helps diagnose if Firebase isn't initializing correctly
       if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
-         toast({ title: "Authentication Error", description: "Firebase API Key is missing. Authentication will be unavailable.", variant: "destructive" });
+         toast({ title: "Configuration Error", description: "Firebase API Key is missing from environment variables. Authentication is unavailable.", variant: "destructive" });
+         console.error("CRITICAL: Firebase API Key (NEXT_PUBLIC_FIREBASE_API_KEY) is missing.");
+      } else if (!firebaseAuth || Object.keys(firebaseAuth).length === 0) {
+         toast({ title: "Authentication Error", description: "Firebase Auth service is not available (empty auth object). Check Firebase initialization.", variant: "destructive" });
+         console.error("CRITICAL: firebaseAuth object is empty or not fully initialized. This might be due to missing API key or other init errors in firebase.ts.", firebaseAuth);
       } else {
-         toast({ title: "Authentication Error", description: "Firebase Auth service is not available. Please check configuration.", variant: "destructive" });
+         toast({ title: "Authentication Error", description: "Firebase Auth service could not be fully initialized. Please check console and Firebase configuration.", variant: "destructive" });
+         console.error("CRITICAL: Firebase Auth (firebaseAuth) is not properly initialized. App options:", firebaseAuth?.app?.options);
       }
     }
-  }, [toast]);
+  }, [toast]); // firebaseAuth is stable from import, toast is a hook.
 
 
   const handleGoogleSignIn = async () => {
-    if (!firebaseAuth || Object.keys(firebaseAuth).length === 0) {
-      toast({ title: "Authentication Error", description: "Firebase Auth not initialized.", variant: "destructive" });
+    if (!firebaseAuth ||  typeof firebaseAuth.signInWithPopup !== 'function') {
+      toast({ title: "Authentication Error", description: "Firebase Auth not properly initialized. Cannot sign in.", variant: "destructive" });
+      console.error("handleGoogleSignIn: firebaseAuth not properly initialized.", firebaseAuth);
       return;
     }
     const provider = new GoogleAuthProvider();
@@ -276,15 +287,16 @@ const HomePage = () => {
       toast({ title: "Signed In", description: "Successfully signed in with Google." });
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
-      toast({ title: "Sign-in Error", description: error.message || "Failed to sign in.", variant: "destructive" });
+      toast({ title: "Sign-in Error", description: `Code: ${error.code}\nMessage: ${error.message}`, variant: "destructive" });
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleSignOut = async () => {
-    if (!firebaseAuth || Object.keys(firebaseAuth).length === 0) {
-      toast({ title: "Authentication Error", description: "Firebase Auth not initialized.", variant: "destructive" });
+    if (!firebaseAuth || typeof firebaseAuth.signOut !== 'function') {
+      toast({ title: "Authentication Error", description: "Firebase Auth not properly initialized. Cannot sign out.", variant: "destructive" });
+      console.error("handleSignOut: firebaseAuth not properly initialized.", firebaseAuth);
       return;
     }
     try {
@@ -336,7 +348,7 @@ const HomePage = () => {
         toast({
           title: "No Routes Found",
           description: "Could not find any cycling routes for the selected criteria. Try adjusting the radius or location.",
-          variant: "default", // Changed from destructive
+          variant: "default", 
         });
       }
     } catch (error: any) {
@@ -353,14 +365,11 @@ const HomePage = () => {
 
   const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
-    // Toasting here can be very noisy if the map updates frequently.
-    // Consider if this toast is essential or if visual feedback from map marker is enough.
-    // For now, let's keep it but be mindful.
     toast({
       title: 'Location Updated',
       description: `New location selected: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
     });
-  }, [toast]); // Dependency array includes toast
+  }, [toast]); 
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
