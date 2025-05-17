@@ -161,8 +161,7 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, 
-        // geometry: route.geometry, // Excluded due to Firestore nested array limitation
+        coordinates: route.coordinates,
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -178,7 +177,6 @@ const RouteDisplay = ({
     } catch (error: any) {
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
-      // Check for the specific Firestore error related to nested arrays
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
         description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). The raw geometry causing this has been excluded.";
       } else if (error.message) {
@@ -259,7 +257,7 @@ const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 const PWA_PROMPT_LS_KEY = 'hasSeenPWAInstallPrompt';
 
 const HomePage = () => {
-  const [radius, setRadius] = useState<number>(5);
+  const [radius, setRadius] = useState<string>("5"); // Store as string for input flexibility
   const [showMapInput, setShowMapInput] = useState<boolean>(true);
   const [routes, setRoutes] = useState<CyclingRoute[] | null>(null);
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
@@ -386,12 +384,27 @@ const HomePage = () => {
     }
   };
 
+  const isRadiusValid = (r: string): boolean => {
+    if (r === "") return false; // Empty is not valid for generation
+    const num = parseInt(r, 10);
+    return !isNaN(num) && num >= 5 && num <= 100;
+  };
 
   const handleGenerateRoutes = useCallback(async () => {
     if (!selectedLocation) {
       toast({
         title: "Location Required",
         description: "Please select a location before generating routes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const numericRadius = parseInt(radius, 10);
+    if (!isRadiusValid(radius)) {
+       toast({
+        title: "Invalid Radius",
+        description: "Please enter a radius between 5 and 100 km.",
         variant: "destructive",
       });
       return;
@@ -410,7 +423,7 @@ const HomePage = () => {
         setLoadingRoutes(false);
         return;
       }
-      const generatedRoutes = await getCyclingRoutes(selectedLocation, radius, 3);
+      const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false); 
@@ -553,37 +566,33 @@ const HomePage = () => {
                 Radius for route length (km)
               </label>
               <Input
-                type="number"
+                type="text" // Use text to allow empty string and manage parsing
                 id="radius"
                 value={radius}
                 onChange={(e) => {
                   const value = e.target.value;
-                  // Allow empty input for user to clear it
-                  if (value === "") {
-                    setRadius(5); // Or some default, or allow it to be temporarily invalid
-                    return;
-                  }
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    // Clamp the value
-                    const clampedValue = Math.max(5, Math.min(100, numValue));
-                    setRadius(clampedValue);
+                  // Allow only digits or empty string during typing
+                  if (value === "" || /^\d*$/.test(value)) {
+                    setRadius(value);
                   }
                 }}
-                onBlur={(e) => {
-                  // Ensure a valid number is set if input is blurred while invalid/empty
-                  const numValue = Number(e.target.value);
-                  if (isNaN(numValue) || numValue < 5) {
-                    setRadius(5);
-                  } else if (numValue > 100) {
-                    setRadius(100);
+                onBlur={() => {
+                  if (radius === "") { // If user made it empty and blurred
+                    return; // Keep it empty
+                  }
+                  const num = parseInt(radius, 10);
+                  if (isNaN(num) || num < 5 || num > 100) {
+                    setRadius(""); // Reset to empty if invalid number or out of range
+                  } else {
+                    setRadius(String(num)); // Normalize (e.g. "05" to "5") and keep if valid
                   }
                 }}
-                placeholder="Enter radius in km (5-100)"
+                placeholder="e.g., 10"
                 className="bg-background border-input focus:ring-primary focus:border-primary rounded-md"
-                min="5"
-                max="100"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Enter a radius between 5 and 100 km.
+              </p>
             </div>
 
             {showMapInput && (
@@ -605,7 +614,11 @@ const HomePage = () => {
             )}
           </CardContent>
           <CardFooter className="pt-6">
-            <Button onClick={handleGenerateRoutes} disabled={loadingRoutes || !selectedLocation} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button 
+              onClick={handleGenerateRoutes} 
+              disabled={loadingRoutes || !selectedLocation || !isRadiusValid(radius)} 
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+            >
               {loadingRoutes ? (
                 <><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
               ) : "Generate Routes"}
@@ -637,5 +650,6 @@ const HomePage = () => {
 };
 
 export default HomePage;
+    
 
     
