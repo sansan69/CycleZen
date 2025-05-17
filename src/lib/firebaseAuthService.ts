@@ -40,8 +40,6 @@ export async function signInWithGoogle(): Promise<User | null> {
     console.log("[firebaseAuthService] signInWithGoogle: currentAuthInstance.name:", currentAuthInstance.name);
   }
 
-  // Corrected check for v9 modular SDK: Simply ensure auth instance is available.
-  // The SDK functions (signInWithPopup, etc.) will handle invalid auth instances.
   if (!currentAuthInstance) {
     console.error(
         "[firebaseAuthService] signInWithGoogle: ERROR - currentAuthInstance is not available (undefined or null). currentAuthInstance:",
@@ -50,11 +48,19 @@ export async function signInWithGoogle(): Promise<User | null> {
     throw new Error("Firebase Auth (signInWithGoogle) not available. Check console for details from firebase.ts and firebaseAuthService.ts.");
   }
   try {
-    // Correct modular usage: signInWithPopup(auth, provider)
     const result = await signInWithPopup(currentAuthInstance, provider);
     return result.user;
   } catch (error: any) {
-    console.error("[firebaseAuthService] Error signing in with Google:", error.code, error.message, error);
+    if (error.code === 'auth/unauthorized-domain') {
+      console.error(
+        "[firebaseAuthService] Error signing in with Google (auth/unauthorized-domain):", 
+        error.message, 
+        "This is a Firebase project configuration issue. Ensure your app's domain (e.g., 'localhost') is added to 'Authorized domains' in Firebase Console > Authentication > Settings, and that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env file is correct. Restart your server after .env changes.",
+        error // Log the full error object for more details
+      );
+    } else {
+      console.error("[firebaseAuthService] Error signing in with Google:", error.code, error.message, error);
+    }
     throw error;
   }
 }
@@ -71,7 +77,6 @@ export async function signOutUser(): Promise<void> {
     throw new Error("Firebase Auth (signOutUser) not available. Check console for details.");
   }
   try {
-    // Correct modular usage: firebaseSignOut(auth)
     await firebaseSignOut(currentAuthInstance);
   } catch (error: any) {
     console.error("[firebaseAuthService] Error signing out:", error.code, error.message, error);
@@ -92,12 +97,8 @@ export function onAuthUserChanged(callback: (user: User | null) => void): () => 
         "[firebaseAuthService] onAuthUserChanged: ERROR - currentAuthInstance is not available. currentAuthInstance:",
         currentAuthInstance
     );
-    // Call the callback with null to ensure the UI doesn't hang in a loading state
-    // if auth can't be initialized for the listener.
     callback(null); 
-    return () => {}; // Return a no-op unsubscribe function
+    return () => {}; 
   }
-  // Correct modular usage: firebaseOnAuthStateChanged(auth, callback)
   return firebaseOnAuthStateChanged(currentAuthInstance, callback);
 }
-
