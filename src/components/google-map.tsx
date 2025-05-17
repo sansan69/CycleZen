@@ -58,7 +58,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             const options: PositionOptions = {
               enableHighAccuracy: true,
-              timeout: 10000, // Increased timeout slightly
+              timeout: 10000, // Increased timeout
               maximumAge: 0,
             };
             
@@ -76,10 +76,10 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         
         if (err.code === 1 || (err.message && (err.message.toLowerCase().includes("permission denied") || err.message.toLowerCase().includes("permissions policy")))) {
             toastDescription = "Location access denied. Please check your browser and operating system location settings and grant permission to this site. You can still manually select a location on the map.";
-        } else if (err.code === 2) {
-            toastDescription = "Location information is unavailable. Please try again or select a location manually.";
-        } else if (err.code === 3) {
-            toastDescription = "Getting location timed out. Please try again or select a location manually.";
+        } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            toastDescription = "Location information is unavailable. Please ensure your device's location services (GPS) are turned on and try again. You can also select a location manually on the map.";
+        } else if (err.code === 3) { // TIMEOUT
+            toastDescription = "Getting location timed out. This can happen if location services are off or taking too long. Please check your device's location settings (GPS) and try again, or select a location manually on the map.";
         } else if (err.message) {
             toastDescription = err.message;
         }
@@ -220,10 +220,12 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
                             let toastDescription = "Could not retrieve your location. Please check permissions.";
                              if (err.code === 1 || (err.message && (err.message.toLowerCase().includes("permission denied") || err.message.toLowerCase().includes("permissions policy")))) {
                                 toastDescription = "Location access denied. Please check your browser and OS settings.";
-                            } else if (err.code === 2) {
-                                toastDescription = "Location information is unavailable.";
-                            } else if (err.code === 3) {
-                                toastDescription = "Getting location timed out.";
+                            } else if (err.code === 2) { // POSITION_UNAVAILABLE
+                                toastDescription = "Location information is unavailable. Please ensure your device's location services (GPS) are turned on and try again.";
+                            } else if (err.code === 3) { // TIMEOUT
+                                toastDescription = "Getting location timed out. This can happen if location services are off or taking too long. Please check your device's location settings (GPS) and try again.";
+                            } else if (err.message) {
+                                toastDescription = err.message;
                             }
                              toast({
                                 title: "Location Error",
@@ -257,3 +259,4 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 };
 
 export default GoogleMapComponent;
+
