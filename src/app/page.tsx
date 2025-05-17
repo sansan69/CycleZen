@@ -430,7 +430,7 @@ const HomePage = () => {
       {/* Hero Section */}
       <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
         <Image
-          src="https://placehold.co/1200x600.png" 
+          src="https://placehold.co/1200x600.png?text=" 
           alt="Cyclist riding on a scenic route at sunset"
           fill
           style={{ objectFit: 'cover' }}
