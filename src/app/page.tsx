@@ -248,40 +248,32 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true); 
 
   useEffect(() => {
-    // Check for critical Firebase config on client side.
-    // These checks are primarily for developer feedback during setup.
     const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
     const projectIdMissing = !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID.trim() === '';
 
     if (apiKeyMissing || projectIdMissing) {
-        let missing = [];
-        if (apiKeyMissing) missing.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
-        if (projectIdMissing) missing.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
-        const message = `${missing.join(" and ")} is missing or empty. Authentication is unavailable.`;
+        let missingVars: string[] = [];
+        if (apiKeyMissing) missingVars.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
+        if (projectIdMissing) missingVars.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
+        const message = `${missingVars.join(" and ")} is missing or empty. Authentication is unavailable.`;
         toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
         console.error(`CRITICAL: ${message}`);
         // authLoading remains true to disable auth buttons
-        // setAuthLoading(false); // DO NOT set to false if critical config is missing
         return; 
     }
     
-    // At this point, critical env vars seem to be present.
-    // onAuthUserChanged from firebaseAuthService will handle checking if firebaseAuth itself is initialized.
     console.log('page.tsx useEffect: Subscribing to auth state changes.');
     console.log('page.tsx useEffect: Project ID from env is:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 
-
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false); // Auth state determined (or error handled by onAuthUserChanged)
+      setAuthLoading(false); 
       if (user) {
-        console.log("User signed in:", user.uid);
+        console.log("page.tsx onAuthUserChanged: User signed in:", user.uid);
       } else {
-        console.log("User signed out or auth not initialized properly by service.");
+        console.log("page.tsx onAuthUserChanged: User signed out or auth not initialized properly by service.");
       }
     });
-    // onAuthUserChanged itself will log errors if firebaseAuth is not valid.
-    // It will also call the callback with null if auth cannot be setup, triggering "User signed out..."
 
     return () => unsubscribe();
   }, [toast]);
@@ -296,8 +288,12 @@ const HomePage = () => {
       // onAuthUserChanged will update currentUser and setAuthLoading(false)
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
-      toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`, variant: "destructive" });
-      setAuthLoading(false); // Ensure loading is false on error
+      let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
+      if (error.code === 'auth/unauthorized-domain') {
+        description = "Error: This app's domain (e.g., localhost) is not authorized for Google Sign-In in your Firebase project. Please check your Firebase console > Authentication > Settings > Authorized domains, and ensure 'localhost' is added.";
+      }
+      toast({ title: "Sign-in Error", description, variant: "destructive" });
+      setAuthLoading(false); 
     }
   };
 
@@ -307,11 +303,10 @@ const HomePage = () => {
     try {
       await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
-      // onAuthUserChanged will update currentUser and setAuthLoading(false)
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); // Ensure loading is false on error
+      setAuthLoading(false); 
     }
   };
 
@@ -368,12 +363,10 @@ const HomePage = () => {
   
   const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
-    // Toast is now handled in a separate useEffect
   }, []); 
 
   useEffect(() => {
     if (selectedLocation) {
-      // Only toast if it's not the very first location set or if it's genuinely different
       if (previousSelectedLocationRef.current &&
           (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
            previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
@@ -490,3 +483,6 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
+
+    
