@@ -309,9 +309,19 @@ const HomePage = () => {
       if (error.code === 'auth/unauthorized-domain') {
         const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
         const configuredAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set in .env.local';
-        description = `Error: Your app's current domain ('${currentOrigin}') is not authorized for Google Sign-In for the Firebase project configured with Auth Domain '${configuredAuthDomain}'. 
+        let hostnameToAdd = 'localhost'; // Default for localhost
+        if (typeof window !== 'undefined' && currentOrigin !== 'unknown' && !currentOrigin.includes('localhost')) {
+            try {
+                hostnameToAdd = new URL(currentOrigin).hostname;
+            } catch (e) {
+                console.warn("Could not parse hostname from currentOrigin", currentOrigin);
+                hostnameToAdd = currentOrigin; // Fallback if URL parsing fails
+            }
+        }
+
+        description = `Error: Your app's current domain ('${currentOrigin}') is not authorized for Google Sign-In. 
         \nTroubleshooting steps:
-        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${currentOrigin.includes('localhost') ? 'localhost' : currentOrigin}' is listed.
+        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
         \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
         \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
@@ -385,12 +395,10 @@ const HomePage = () => {
   
   const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
-    // Toast is now handled in a separate useEffect
   }, []); 
 
   useEffect(() => {
     if (selectedLocation) {
-      // Only show toast if the location has actually changed from the previous one
       if (previousSelectedLocationRef.current &&
           (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
            previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
