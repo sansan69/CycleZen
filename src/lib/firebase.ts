@@ -28,8 +28,9 @@ if (!apiKey || apiKey.trim() === '' || !projectId || projectId.trim() === '') {
     "Firebase will not initialize properly. Check .env file and restart server. " +
     `API Key available: ${!!apiKey}, Project ID available: ${!!projectId}`
   );
+  // auth remains undefined here
 } else {
-  console.log("[firebase.ts] API Key and Project ID seem present. Proceeding with initialization.");
+  console.log("[firebase.ts] API Key and Project ID seem present. Proceeding with initialization attempt.");
   try {
     if (getApps().length === 0) {
       app = initializeApp(firebaseConfig);
@@ -43,64 +44,71 @@ if (!apiKey || apiKey.trim() === '' || !projectId || projectId.trim() === '') {
       db = getFirestore(app);
       console.log("[firebase.ts] Firestore instance obtained.");
 
+      console.log("[firebase.ts] PRE-getAuth: Current `auth` variable is:", auth); // Log before getAuth
       try {
-        console.log("[firebase.ts] Attempting getAuth(app)...");
         auth = getAuth(app);
-        console.log("[firebase.ts] After getAuth(app): auth object is:", auth);
-        console.log("[firebase.ts] After getAuth(app): typeof auth:", typeof auth);
+        console.log("[firebase.ts] POST-getAuth: `getAuth(app)` returned:", auth);
+        console.log("[firebase.ts] POST-getAuth: typeof auth:", typeof auth);
         if (auth) {
-            console.log("[firebase.ts] After getAuth(app): typeof auth.onAuthStateChanged:", typeof auth.onAuthStateChanged);
-            console.log("[firebase.ts] After getAuth(app): typeof auth.signInWithPopup:", typeof auth.signInWithPopup);
-            console.log("[firebase.ts] After getAuth(app): auth.app exists:", !!auth.app);
+            console.log("[firebase.ts] POST-getAuth: typeof auth.onAuthStateChanged:", typeof auth.onAuthStateChanged);
+            console.log("[firebase.ts] POST-getAuth: typeof auth.signInWithPopup:", typeof auth.signInWithPopup);
+            console.log("[firebase.ts] POST-getAuth: auth.app exists:", !!auth.app);
         }
 
-
-        if (auth && typeof auth.onAuthStateChanged === 'function' && typeof auth.signInWithPopup === 'function' && auth.app) {
-          console.log("[firebase.ts] Firebase auth instance appears VALID and COMPLETE.");
+        // Validation block
+        if (auth && typeof auth === 'object' && auth !== null &&
+            typeof auth.onAuthStateChanged === 'function' &&
+            typeof auth.signInWithPopup === 'function' &&
+            typeof auth.signOut === 'function' && 
+            auth.app
+        ) {
+          console.log("[firebase.ts] VALIDATION PASSED: Firebase auth instance appears VALID and COMPLETE.");
         } else {
           console.error(
-            "CRITICAL from firebase.ts: getAuth(app) did NOT return a valid or complete Auth instance. " +
-            "Auth object:", auth,
+            "CRITICAL from firebase.ts: `getAuth(app)` did NOT return a valid or complete Auth instance OR validation failed. " +
+            "Auth object after getAuth:", auth,
             "typeof auth:", typeof auth,
             "Has onAuthStateChanged function?", typeof auth?.onAuthStateChanged === 'function',
             "Has signInWithPopup function?", typeof auth?.signInWithPopup === 'function',
+            "Has signOut function?", typeof auth?.signOut === 'function',
             "Has .app property?", !!auth?.app
           );
           auth = undefined; // Explicitly set to undefined if not valid or complete
-          console.log("[firebase.ts] Auth set to undefined due to failed validation.");
+          console.log("[firebase.ts] VALIDATION FAILED: `auth` has been set to undefined.");
         }
       } catch (e: any) {
         console.error(
-          "CRITICAL from firebase.ts: Error calling getAuth(app):", e.message,
+          "CRITICAL from firebase.ts: Error during getAuth(app) or its validation:", e.message,
           "Firebase App Project ID from app object:", app?.options?.projectId,
           "Stack:", e.stack
         );
         auth = undefined; // Ensure auth is undefined on error
-        console.log("[firebase.ts] Auth set to undefined due to exception in getAuth(app).");
+        console.log("[firebase.ts] Auth set to undefined due to exception in getAuth(app) or validation.");
       }
     } else {
-      console.error("CRITICAL from firebase.ts: Firebase app object is undefined after initialization/getApps attempt.");
-      // auth remains undefined here
+      console.error("CRITICAL from firebase.ts: Firebase app object is undefined after initialization/getApps attempt. Auth cannot be initialized.");
+      // auth remains undefined here as db would also be.
     }
 
   } catch (e: any) {
     console.error(
       "CRITICAL from firebase.ts: Firebase core initialization error (initializeApp or getFirestore):", e.message,
-      "Config used:", firebaseConfig,
+      "Config used:", JSON.stringify(firebaseConfig, (key, value) => key === 'apiKey' ? '***REDACTED***' : value), // Avoid logging API key
       "Stack:", e.stack
     );
     app = undefined;
     db = undefined;
-    auth = undefined; // Ensure auth is undefined on error
+    auth = undefined; // Ensure auth is undefined on core initialization error
     console.log("[firebase.ts] Auth set to undefined due to core initialization exception.");
   }
 }
 
 console.log(
-  "[firebase.ts] EXPORTING: App type:", typeof app,
-  "DB type:", typeof db,
-  "Auth type:", typeof auth,
+  "[firebase.ts] EXPORTING: App defined:", !!app,
+  "DB defined:", !!db,
+  "Auth defined:", !!auth,
   "Auth value:", auth,
+  "typeof auth (at export):", typeof auth,
   "typeof auth.signInWithPopup (at export):", typeof auth?.signInWithPopup
 );
 

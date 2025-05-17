@@ -3,24 +3,39 @@ import type { User } from "firebase/auth";
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signOut as firebaseSignOut, // Renamed to avoid conflict
-  onAuthStateChanged as firebaseOnAuthStateChanged, // Renamed
+  signOut as firebaseSignOut, 
+  onAuthStateChanged as firebaseOnAuthStateChanged, 
 } from "firebase/auth";
-import { auth as firebaseAuth } from "@/lib/firebase"; // Ensure this is the initialized auth object
+import { auth as firebaseAuth } from "@/lib/firebase"; 
 
 // Log immediately upon module import to see what `firebaseAuth` is.
 console.log(
-    "[firebaseAuthService] MODULE LEVEL: Imported firebaseAuth:", firebaseAuth,
+    "[firebaseAuthService] MODULE LEVEL: Importing `auth` as `firebaseAuth` from '@/lib/firebase'.",
+    "Imported firebaseAuth value:", firebaseAuth,
     "typeof firebaseAuth:", typeof firebaseAuth,
-    "typeof firebaseAuth.signInWithPopup:", typeof firebaseAuth?.signInWithPopup,
-    "typeof firebaseAuth.onAuthStateChanged:", typeof firebaseAuth?.onAuthStateChanged
 );
+
+if (firebaseAuth) {
+    console.log(
+        "[firebaseAuthService] MODULE LEVEL: Details of imported firebaseAuth:",
+        "typeof firebaseAuth.signInWithPopup:", typeof firebaseAuth.signInWithPopup,
+        "typeof firebaseAuth.onAuthStateChanged:", typeof firebaseAuth.onAuthStateChanged,
+        "firebaseAuth.app exists:", !!firebaseAuth.app,
+        "firebaseAuth.hasOwnProperty('signInWithPopup'):", firebaseAuth.hasOwnProperty('signInWithPopup')
+    );
+} else {
+    console.warn(
+        "[firebaseAuthService] MODULE LEVEL: Imported firebaseAuth is undefined or null. Auth functions will likely fail."
+    );
+}
+
 
 const provider = new GoogleAuthProvider();
 
 export async function signInWithGoogle(): Promise<User | null> {
-  const currentAuthInstance = firebaseAuth; // Use a local const for clarity in logs for this call
+  const currentAuthInstance = firebaseAuth; 
   console.log("[firebaseAuthService] signInWithGoogle: Using firebaseAuth instance:", currentAuthInstance);
+  
   if (currentAuthInstance) {
     console.log("[firebaseAuthService] signInWithGoogle: typeof currentAuthInstance.signInWithPopup:", typeof currentAuthInstance.signInWithPopup);
     console.log("[firebaseAuthService] signInWithGoogle: currentAuthInstance.hasOwnProperty('signInWithPopup'):", currentAuthInstance.hasOwnProperty('signInWithPopup'));
@@ -28,15 +43,14 @@ export async function signInWithGoogle(): Promise<User | null> {
     console.log("[firebaseAuthService] signInWithGoogle: typeof currentAuthInstance.onAuthStateChanged:", typeof currentAuthInstance.onAuthStateChanged);
   }
 
-
   if (!currentAuthInstance || typeof currentAuthInstance.signInWithPopup !== 'function') {
     console.error(
         "[firebaseAuthService] signInWithGoogle: ERROR - currentAuthInstance is not properly initialized or signInWithPopup is not a function. currentAuthInstance:",
-        currentAuthInstance,
+        currentAuthInstance, // This will show {} if it's an empty object
         "typeof signInWithPopup:",
         typeof currentAuthInstance?.signInWithPopup
     );
-    throw new Error("Firebase Auth (signInWithGoogle) not properly initialized. Check console for details.");
+    throw new Error("Firebase Auth (signInWithGoogle) not properly initialized. Check console for details from firebase.ts and firebaseAuthService.ts.");
   }
   try {
     const result = await signInWithPopup(currentAuthInstance, provider);
@@ -81,15 +95,17 @@ export function onAuthUserChanged(callback: (user: User | null) => void): () => 
 
   if (!currentAuthInstance || typeof currentAuthInstance.onAuthStateChanged !== 'function' || !currentAuthInstance.app) {
     console.error(
-        "[firebaseAuthService] onAuthUserChanged: ERROR - currentAuthInstance not properly initialized or onAuthStateChanged is not a function / app is missing. currentAuthInstance:",
+        "[firebaseAuthService] onAuthUserChanged: ERROR - currentAuthInstance not properly initialized, onAuthStateChanged is not a function, or .app is missing. currentAuthInstance:",
         currentAuthInstance,
         "typeof onAuthStateChanged:",
         typeof currentAuthInstance?.onAuthStateChanged,
         "app exists:",
         !!currentAuthInstance?.app
     );
-    callback(null);
-    return () => {}; // No-op unsubscribe
+    // Call the callback with null to ensure the UI doesn't hang in a loading state
+    // if auth can't be initialized for the listener.
+    callback(null); 
+    return () => {}; // Return a no-op unsubscribe function
   }
   return firebaseOnAuthStateChanged(currentAuthInstance, callback);
 }
