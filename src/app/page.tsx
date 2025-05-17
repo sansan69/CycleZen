@@ -10,6 +10,7 @@ import {
   addDoc,
 } from "firebase/firestore";
 import Link from "next/link";
+import Image from "next/image"; // Import next/image
 
 import { db } from "@/lib/firebase";
 import { 
@@ -42,9 +43,11 @@ import {
 const RouteDisplay = ({
   route,
   user,
+  selectedLocationForRouteName // Pass selectedLocation for route naming
 }: {
   route: CyclingRoute;
   user: User | null;
+  selectedLocationForRouteName: Coordinate | null; 
 }) => {
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
@@ -156,7 +159,7 @@ const RouteDisplay = ({
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
         timestamp: new Date(),
-        routeName: `Route near ${selectedLocation ? `${selectedLocation.lat.toFixed(2)}, ${selectedLocation.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
+        routeName: `Route near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
       });
       toast({
@@ -243,7 +246,6 @@ const RouteDisplay = ({
 };
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-let selectedLocation: Coordinate | null = null; // Used by handleSaveRoute to name the route
 
 const HomePage = () => {
   const [radius, setRadius] = useState<number>(5);
@@ -251,7 +253,7 @@ const HomePage = () => {
   const [routes, setRoutes] = useState<CyclingRoute[] | null>(null);
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
   const { toast } = useToast();
-  const [_selectedLocation, _setSelectedLocation] = useState<Coordinate | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
   const previousSelectedLocationRef = useRef<Coordinate | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -283,7 +285,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // authLoading remains true to disable auth buttons if critical config is missing
+        // authLoading will remain true to disable auth buttons if critical config is missing
         return; 
     }
     
@@ -310,7 +312,6 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signInWithGoogle();
-      // onAuthUserChanged will update currentUser and setAuthLoading(false)
       toast({ title: "Signed In", description: "Successfully signed in with Google." });
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
@@ -324,14 +325,11 @@ const HomePage = () => {
                 hostnameToAdd = new URL(currentOrigin).hostname;
             } catch (e) {
                 console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-                hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
+                hostnameToAdd = currentOrigin; 
             }
-        } else if (typeof window !== 'undefined' && currentOrigin.includes('localhost')) {
-           // For localhost, hostnameToAdd remains 'localhost'
         }
-
-
-        description = `Error: Your app's current domain ('${currentOrigin}') is not authorized for Google Sign-In. 
+        
+        description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
         \nTroubleshooting steps:
         \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed. The current origin is: ${window.location.origin}. The auth domain from env is: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}.
         \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
@@ -339,7 +337,7 @@ const HomePage = () => {
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive" });
-      setAuthLoading(false); // Ensure loading is set to false on error
+      setAuthLoading(false); 
     }
   };
 
@@ -348,7 +346,6 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signOutUser();
-      // onAuthUserChanged will update currentUser and setAuthLoading(false)
       toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {      
       console.error("[handleSignOut] Error from signOutUser service:", error);
@@ -359,7 +356,7 @@ const HomePage = () => {
 
 
   const handleGenerateRoutes = useCallback(async () => {
-    if (!_selectedLocation) {
+    if (!selectedLocation) {
       toast({
         title: "Location Required",
         description: "Please select a location before generating routes.",
@@ -381,7 +378,7 @@ const HomePage = () => {
         setLoadingRoutes(false);
         return;
       }
-      const generatedRoutes = await getCyclingRoutes(_selectedLocation, radius, 3);
+      const generatedRoutes = await getCyclingRoutes(selectedLocation, radius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false); 
@@ -406,31 +403,51 @@ const HomePage = () => {
     } finally {
       setLoadingRoutes(false);
     }
-  }, [_selectedLocation, radius, toast]);
+  }, [selectedLocation, radius, toast]);
   
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
-    _setSelectedLocation(locationFromMap);
-    selectedLocation = locationFromMap; 
+    setSelectedLocation(locationFromMap);
   }, []); 
 
   useEffect(() => {
-    if (_selectedLocation && previousSelectedLocationRef.current) { 
-      if (previousSelectedLocationRef.current.lat !== _selectedLocation.lat ||
-          previousSelectedLocationRef.current.lng !== _selectedLocation.lng) {
+    if (selectedLocation && previousSelectedLocationRef.current) { 
+      if (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
+          previousSelectedLocationRef.current.lng !== selectedLocation.lng) {
         toast({
           title: 'Location Updated',
-          description: `New location selected: ${_selectedLocation.lat.toFixed(4)}, ${_selectedLocation.lng.toFixed(4)}`,
+          description: `New location selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
         });
       }
     }
-    previousSelectedLocationRef.current = _selectedLocation; 
-  }, [_selectedLocation, toast]); 
+    previousSelectedLocationRef.current = selectedLocation; 
+  }, [selectedLocation, toast]); 
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
+    <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
-      <header className="w-full max-w-4xl mx-auto mb-6 text-center">
-        <div className="flex flex-col sm:flex-row justify-end items-center sm:items-center mb-4 gap-2 sm:gap-3">
+      
+      {/* Hero Section */}
+      <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
+        <Image
+          src="https://placehold.co/1200x600.png" // More typical hero aspect ratio
+          alt="Cyclist riding on a scenic route at sunset"
+          fill
+          style={{ objectFit: 'cover' }}
+          priority // Important for LCP
+          data-ai-hint="cycling sunset"
+        />
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 p-4">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight">
+            CycleZen
+          </h1>
+          <p className="text-lg sm:text-xl text-gray-200 mt-2 text-center max-w-xl">
+            Your companion for discovering and sharing amazing cycling routes.
+          </p>
+        </div>
+      </div>
+
+      <header className="w-full max-w-4xl mx-auto py-4 px-4 sm:px-6 md:px-8 text-center sm:text-right">
+        <div className="flex flex-col sm:flex-row justify-end items-center gap-2 sm:gap-3">
           {authLoading ? (
             <Button variant="outline" disabled>
               <Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Loading Auth...
@@ -454,10 +471,9 @@ const HomePage = () => {
             </Button>
           )}
         </div>
-        <h1 className="text-4xl font-bold text-primary">CycleZen</h1>
-        <p className="text-lg text-muted-foreground">Your companion for discovering amazing cycling routes.</p>
       </header>
-      <div className="container mx-auto max-w-2xl">
+      
+      <main className="container mx-auto max-w-2xl p-4 sm:p-6 md:p-8">
         <Card className="mb-6 bg-card shadow-xl rounded-xl">
           <CardHeader>
             <CardTitle className="text-2xl text-primary">Route Generation</CardTitle>
@@ -492,10 +508,10 @@ const HomePage = () => {
                 />
               </div>
             )}
-            {!showMapInput && _selectedLocation && (
+            {!showMapInput && selectedLocation && (
               <div className="text-sm p-3 bg-muted rounded-md border border-border">
                 <p className="font-semibold text-foreground">Starting Location:</p>
-                <p className="text-muted-foreground">Lat: {_selectedLocation.lat.toFixed(4)}, Lng: {_selectedLocation.lng.toFixed(4)}</p>
+                <p className="text-muted-foreground">Lat: {selectedLocation.lat.toFixed(4)}, Lng: {selectedLocation.lng.toFixed(4)}</p>
                 <Button onClick={() => { setShowMapInput(true); setRoutes(null); }} variant="link" className="p-0 h-auto text-accent mt-1">
                   Change location
                 </Button>
@@ -503,7 +519,7 @@ const HomePage = () => {
             )}
           </CardContent>
           <CardFooter className="pt-6">
-            <Button onClick={handleGenerateRoutes} disabled={loadingRoutes || !_selectedLocation} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button onClick={handleGenerateRoutes} disabled={loadingRoutes || !selectedLocation} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
               {loadingRoutes ? (
                 <><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
               ) : "Generate Routes"}
@@ -525,13 +541,14 @@ const HomePage = () => {
               <Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Location Select
             </Button>
             {routes.map((route, index) => (
-              <RouteDisplay key={index} route={route} user={currentUser} />
+              <RouteDisplay key={index} route={route} user={currentUser} selectedLocationForRouteName={selectedLocation}/>
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };
 
 export default HomePage;
+
