@@ -248,9 +248,22 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true); 
 
   useEffect(() => {
-    const apiKeyMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.trim() === '';
-    const projectIdMissing = !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID.trim() === '';
-    const authDomainMissing = !process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN.trim() === '';
+    const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    const envProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    const envAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+
+    console.log("--- Firebase Config from Client Environment ---");
+    console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:", envAuthDomain ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? "Present" : "MISSING or Empty");
+    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? "Present" : "MISSING or Empty");
+    console.log("----------------------------------------------");
+
+    const apiKeyMissing = !envApiKey || envApiKey.trim() === '';
+    const projectIdMissing = !envProjectId || envProjectId.trim() === '';
+    const authDomainMissing = !envAuthDomain || envAuthDomain.trim() === '';
 
     if (apiKeyMissing || projectIdMissing || authDomainMissing) {
         let missingVars: string[] = [];
@@ -258,15 +271,16 @@ const HomePage = () => {
         if (projectIdMissing) missingVars.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
         if (authDomainMissing) missingVars.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
         
-        const message = `${missingVars.join(", ")} is missing or empty. Authentication is unavailable.`;
-        toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive", duration: Infinity });
-        console.error(`CRITICAL: ${message}`);
-        // authLoading remains true to disable auth buttons
+        const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable.`;
+        toast({ title: "Configuration Error", description: `${message} Please check your .env.local file and restart the server.`, variant: "destructive", duration: Infinity });
+        console.error(`CRITICAL from page.tsx: ${message}`);
+        // authLoading remains true to disable auth buttons if critical config is missing
+        // setAuthLoading(false) is NOT called here intentionally
         return; 
     }
     
-    console.log('page.tsx useEffect: Project ID from env is:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
-    console.log('page.tsx useEffect: Auth Domain from env is:', process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN);
+    console.log('page.tsx useEffect: Project ID from env is:', envProjectId);
+    console.log('page.tsx useEffect: Auth Domain from env is:', envAuthDomain);
 
 
     const unsubscribe = onAuthUserChanged((user) => {
@@ -294,7 +308,7 @@ const HomePage = () => {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
       if (error.code === 'auth/unauthorized-domain') {
-        description = "Error: This app's domain (e.g., localhost) is not authorized for Google Sign-In in your Firebase project, OR your app's configured `authDomain` may not match your Firebase project. Please verify: \n1. In Firebase console > Authentication > Settings > Authorized domains: ensure 'localhost' (or your app's domain) is listed. \n2. In your .env file: ensure `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` matches the Auth Domain in your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration). \n3. Restart your app server after any .env changes.";
+        description = "Error: This app's domain (e.g., localhost) is not authorized for Google Sign-In in your Firebase project, OR your app's configured `authDomain` may not match your Firebase project. Please verify: \n1. In Firebase console > Authentication > Settings > Authorized domains: ensure 'localhost' (or your app's domain) is listed. \n2. In your .env.local file: ensure `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` matches the Auth Domain in your Firebase project settings (Project settings > General > Your apps > SDK setup and configuration). \n3. Restart your app server after any .env changes.";
       }
       toast({ title: "Sign-in Error", description, variant: "destructive" });
       setAuthLoading(false); 
@@ -307,9 +321,7 @@ const HomePage = () => {
     try {
       await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
-    } catch (error: any) {
-      console.error("[handleSignOut] Error from signOutUser service:", error);
-      toast({ title: "Sign-out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
+    } catch (error: any) {      
       setAuthLoading(false); 
     }
   };
@@ -367,10 +379,12 @@ const HomePage = () => {
   
   const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
+    // Toast is now handled in a separate useEffect
   }, []); 
 
   useEffect(() => {
     if (selectedLocation) {
+      // Only show toast if the location has actually changed from the previous one
       if (previousSelectedLocationRef.current &&
           (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
            previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
@@ -490,3 +504,4 @@ export default HomePage;
     
 
     
+
