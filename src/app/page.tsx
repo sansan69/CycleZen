@@ -2,8 +2,8 @@
 "use client";
 
 import GoogleMapComponent from "@/components/google-map";
-import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service"; // Updated import
-import { useState, useEffect } from "react";
+import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
+import { useState, useEffect, useCallback } from "react";
 import {
   collection,
   addDoc,
@@ -31,17 +31,15 @@ import {
   GoogleMap,
   Polyline,
   Marker,
+  LoadScript
 } from "@react-google-maps/api";
 
-import { LoadScript } from "@react-google-maps/api";
-
-// RouteData interface is removed as we'll use CyclingRoute directly
 
 const RouteDisplay = ({
   route,
   user,
 }: {
-  route: CyclingRoute; // Changed to CyclingRoute
+  route: CyclingRoute;
   user: any;
 }) => {
   const { toast } = useToast();
@@ -53,7 +51,6 @@ const RouteDisplay = ({
 
   useEffect(() => {
     if (route.coordinates && route.coordinates.length > 0) {
-      // Calculate center of the route
       const latitudes = route.coordinates.map(p => p.lat);
       const longitudes = route.coordinates.map(p => p.lng);
       const minLat = Math.min(...latitudes);
@@ -65,7 +62,6 @@ const RouteDisplay = ({
         lng: (minLng + maxLng) / 2,
       });
     } else {
-      // Fallback center if coordinates are not available (should not happen for a valid route)
       setCenter({ lat: 0, lng: 0 });
     }
   }, [route]);
@@ -86,7 +82,7 @@ const RouteDisplay = ({
     try {
       const docRef = await addDoc(collection(db, "routes"), {
         userId: user.uid,
-        routeData: route, // Saves the CyclingRoute object
+        routeData: route,
         timestamp: new Date(),
       });
       toast({
@@ -104,7 +100,7 @@ const RouteDisplay = ({
   };
 
   if (!center) {
-    return <Skeleton className="h-[400px] w-full" />; // Or some loading state for the map
+    return <Skeleton className="h-[400px] w-full" />;
   }
 
   return (
@@ -126,7 +122,7 @@ const RouteDisplay = ({
           <a href={routeUrl} target='_blank' rel="noopener noreferrer">Open in Google Maps</a>
         </Button>
         <UiButton onClick={handleSaveRoute}>Save this route</UiButton>
-      </CardFooter> 
+      </CardFooter>
     </Card>
   );
 };
@@ -135,8 +131,8 @@ const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 const HomePage = () => {
   const [radius, setRadius] = useState<number>(5);
-  const [showMapInput, setShowMapInput] = useState<boolean>(true); // Renamed for clarity
-  const [routes, setRoutes] = useState<CyclingRoute[] | null>(null); // Changed to routes: CyclingRoute[]
+  const [showMapInput, setShowMapInput] = useState<boolean>(true);
+  const [routes, setRoutes] = useState<CyclingRoute[] | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const { toast } = useToast();
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
@@ -152,7 +148,7 @@ const HomePage = () => {
     }
 
     setLoading(true);
-    setRoutes(null); // Clear previous routes
+    setRoutes(null);
     try {
       const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
       if (!apiKey) {
@@ -164,11 +160,10 @@ const HomePage = () => {
         setLoading(false);
         return;
       }
-      // Fetch 3 routes by default as per PRD (3-10)
-      const generatedRoutes = await getCyclingRoutes(selectedLocation, radius, 3); 
+      const generatedRoutes = await getCyclingRoutes(selectedLocation, radius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
-        setShowMapInput(false); // Hide map input if routes are generated
+        setShowMapInput(false);
          toast({
           title: "Routes Generated",
           description: `${generatedRoutes.length} cycling routes found.`,
@@ -177,7 +172,7 @@ const HomePage = () => {
         toast({
           title: "No Routes Found",
           description: "Could not find any cycling routes for the selected criteria. Try adjusting the radius or location.",
-          variant: "default", 
+          variant: "default",
         });
       }
     } catch (error: any) {
@@ -192,15 +187,15 @@ const HomePage = () => {
     }
   };
 
-  const handleLocationSelected = (location: Coordinate) => {
+  const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
     toast({
       title: 'Location Updated',
       description: `New location selected: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
     });
-  };
+  }, [toast]);
 
-  const user = null; // Placeholder for user authentication
+  const user = null; 
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4">
@@ -232,8 +227,8 @@ const HomePage = () => {
             </div>
 
             {showMapInput && (
-             <GoogleMapComponent 
-               onLocationSelected={handleLocationSelected} 
+             <GoogleMapComponent
+               onLocationSelected={handleLocationSelected}
                googleMapsApiKey={googleMapsApiKey}
              />
             )}
@@ -242,8 +237,8 @@ const HomePage = () => {
             )}
 
 
-            <UiButton 
-              onClick={handleGenerateRoutes} 
+            <UiButton
+              onClick={handleGenerateRoutes}
               disabled={loading || !selectedLocation}
               className="bg-accent hover:bg-accent/90 text-accent-foreground"
             >
@@ -253,7 +248,7 @@ const HomePage = () => {
                   Generating...
                 </>
               ) : (
-                "Generate Routes" 
+                "Generate Routes"
               )}
             </UiButton>
           </CardContent>
@@ -307,7 +302,7 @@ export default function WrappedHomePage() {
             <CardTitle className="text-destructive">Configuration Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-destructive-foreground">Google Maps API key is missing. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment variables.</p>
+            <p>Google Maps API key is missing. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment variables.</p>
             <p className="mt-2 text-sm text-muted-foreground">The map functionality cannot be loaded without this key.</p>
           </CardContent>
         </Card>
@@ -320,5 +315,3 @@ export default function WrappedHomePage() {
     </LoadScript>
   );
 }
-
-    
