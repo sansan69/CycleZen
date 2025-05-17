@@ -9,6 +9,8 @@ import {
   addDoc,
   Firestore,
   getFirestore,
+  doc, // Import doc
+  setDoc, // Import setDoc if you want to use custom IDs, or stick with addDoc for auto IDs
 } from "firebase/firestore";
 
 import { app } from "@/lib/firebase.ts";
@@ -72,19 +74,27 @@ const RouteDisplay = ({
     if (route.coordinates.length <= MAX_GOOGLE_MAPS_WAYPOINTS) {
       waypointsForGoogleMaps = route.coordinates;
     } else {
+      // Ensure start point is included
       waypointsForGoogleMaps.push(route.coordinates[0]); 
 
-      const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2;
+      // Calculate intermediate points, ensuring we don't exceed MAX_GOOGLE_MAPS_WAYPOINTS (including start and end)
+      const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2; // -2 for start and end
       const totalRoutePoints = route.coordinates.length;
-      const step = Math.floor((totalRoutePoints - 1) / (numIntermediatePoints + 1));
+      // Ensure step is at least 1 and segments are meaningful
+      const step = Math.floor((totalRoutePoints - 2) / (numIntermediatePoints > 0 ? numIntermediatePoints : 1));
+
 
       for (let i = 1; i <= numIntermediatePoints; i++) {
         const waypointIndex = i * step;
-        if (waypointIndex < totalRoutePoints -1) { 
+        // Ensure waypointIndex is within bounds and not the last point (which is added separately)
+        if (waypointIndex > 0 && waypointIndex < totalRoutePoints - 1) { 
            waypointsForGoogleMaps.push(route.coordinates[waypointIndex]);
         }
       }
-      waypointsForGoogleMaps.push(route.coordinates[totalRoutePoints - 1]); 
+      // Ensure end point is included if it's not the same as start and list isn't full
+      if (waypointsForGoogleMaps.length < MAX_GOOGLE_MAPS_WAYPOINTS) {
+         waypointsForGoogleMaps.push(route.coordinates[totalRoutePoints - 1]); 
+      }
     }
   }
   
@@ -99,7 +109,7 @@ const RouteDisplay = ({
 
 
   const handleSaveRoute = async () => {
-    if (!user || !user.uid) { // Check for user and user.uid
+    if (!user || !user.uid) { 
       toast({
         title: "Authentication Required",
         description: "Please log in to save routes.",
@@ -109,19 +119,21 @@ const RouteDisplay = ({
     }
     const db: Firestore = getFirestore(app);
     try {
-      const docRef = await addDoc(collection(db, "routes"), {
-        userId: user.uid,
-        routeData: { // Storing the structured route data
+      // Save under users/{userId}/savedRoutes/{autoId}
+      const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
+      const docRef = await addDoc(userSavedRoutesCollection, {
+        // No need for userId field inside the document anymore, as it's part of the path.
+        routeData: { 
           distance: route.distance,
           estimatedTime: route.estimatedTime,
           coordinates: route.coordinates,
-          geometry: route.geometry, // Save geometry if available
+          geometry: route.geometry, 
         },
         timestamp: new Date(),
       });
       toast({
         title: "Route Saved",
-        description: `Route saved successfully.`, // Simplified message
+        description: `Route saved successfully.`, 
       });
     } catch (error) {
       console.error("Error saving route:", error);
@@ -156,32 +168,40 @@ const RouteDisplay = ({
   }
 
   return (
-    <Card>
+    <Card className="bg-card shadow-lg rounded-lg">
       <CardHeader>
-        <CardTitle>Route Option</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-primary">Route Option</CardTitle>
+        <CardDescription className="text-muted-foreground">
           Distance: {route.distance.toFixed(2)} km, Duration:{" "}
           {route.estimatedTime.toFixed(0)} min
         </CardDescription>
       </CardHeader>
       <CardContent>
         {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && center ? (
-          <GoogleMap mapContainerStyle={mapStyles} zoom={10} center={center} >
-            <Polyline path={route.coordinates} options={{ strokeColor: "#FF0000", strokeWeight: 2 }} />
-          </GoogleMap>
+          <div className="rounded-md overflow-hidden border border-border">
+            <GoogleMap mapContainerStyle={mapStyles} zoom={12} center={center} options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}>
+              <Polyline path={route.coordinates} options={{ strokeColor: "hsl(var(--primary))", strokeWeight: 3, strokeOpacity: 0.8 }} />
+            </GoogleMap>
+          </div>
         ) : (
-          <Skeleton className="h-[300px] w-full" />
+          <Skeleton className="h-[300px] w-full bg-muted" />
         )}
       </CardContent>
-      <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
-        <Button asChild variant="outline">
+      <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
+        <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
           <a href={routeUrl} target='_blank' rel="noopener noreferrer">Open in Google Maps</a>
         </Button>
         <div className="flex gap-2">
-          <Button onClick={handleShareRoute} variant="outline">
+          <Button onClick={handleShareRoute} variant="outline" className="hover:bg-secondary/80">
             <Icons.share className="mr-2 h-4 w-4" /> Share
           </Button>
-          <Button onClick={handleSaveRoute} disabled={!user || !user.uid}>Save this route</Button>
+          <Button 
+            onClick={handleSaveRoute} 
+            disabled={!user || !user.uid} 
+            className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
+          >
+            Save this route
+          </Button>
         </div>
       </CardFooter>
     </Card>
@@ -261,17 +281,21 @@ const HomePage = () => {
   }, [toast]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary p-4">
+    <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
       <Toaster />
+      <header className="w-full max-w-4xl mx-auto mb-8 text-center">
+        <h1 className="text-4xl font-bold text-primary">CycleZen</h1>
+        <p className="text-lg text-muted-foreground">Your companion for discovering amazing cycling routes.</p>
+      </header>
       <div className="container mx-auto max-w-2xl">
-        <Card className="mb-4">
+        <Card className="mb-6 bg-card shadow-xl rounded-xl">
           <CardHeader>
-            <CardTitle className="text-primary">CycleZen</CardTitle>
-            <CardDescription>
-              Find your perfect cycling route.
+            <CardTitle className="text-2xl text-primary">Route Generation</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Select a starting point and radius to find your next ride.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent className="grid gap-6">
             <div className="grid gap-2">
               <label
                 htmlFor="radius"
@@ -283,24 +307,26 @@ const HomePage = () => {
                 type="number"
                 id="radius"
                 value={radius}
-                onChange={(e) => setRadius(Number(e.target.value))}
+                onChange={(e) => setRadius(Math.max(1, Number(e.target.value)))} // Ensure radius is at least 1
                 placeholder="Enter radius in km"
-                className="bg-background border-input"
+                className="bg-background border-input focus:ring-primary focus:border-primary rounded-md"
                 min="1" 
               />
             </div>
 
             {showMapInput && (
-             <GoogleMapComponent
-               onLocationSelected={handleLocationSelected}
-               googleMapsApiKey={googleMapsApiKey}
-             />
+             <div className="rounded-lg overflow-hidden shadow-md border border-border">
+                <GoogleMapComponent
+                  onLocationSelected={handleLocationSelected}
+                  googleMapsApiKey={googleMapsApiKey}
+                />
+              </div>
             )}
             {!showMapInput && selectedLocation && (
-              <div className="text-sm p-2 bg-muted rounded-md">
-                <p className="font-semibold">Starting Location:</p>
-                <p>Lat: {selectedLocation.lat.toFixed(4)}, Lng: {selectedLocation.lng.toFixed(4)}</p>
-                 <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowMapInput(true)}>Change Start Location</Button>
+              <div className="text-sm p-3 bg-muted rounded-md border border-border">
+                <p className="font-semibold text-foreground">Starting Location:</p>
+                <p className="text-muted-foreground">Lat: {selectedLocation.lat.toFixed(4)}, Lng: {selectedLocation.lng.toFixed(4)}</p>
+                 <Button variant="outline" size="sm" className="mt-2 border-primary text-primary hover:bg-primary/10" onClick={() => setShowMapInput(true)}>Change Start Location</Button>
               </div>
             )}
 
@@ -308,12 +334,12 @@ const HomePage = () => {
             <Button
               onClick={handleGenerateRoutes}
               disabled={loading || !selectedLocation}
-              className="bg-accent hover:bg-accent/90 text-accent-foreground"
+              className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-semibold py-3 rounded-md text-base disabled:bg-muted disabled:text-muted-foreground"
             >
               {loading ? (
                 <>
-                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  <Icons.spinner className="mr-2 h-5 w-5 animate-spin" />
+                  Generating Routes...
                 </>
               ) : (
                 "Generate Routes"
@@ -323,54 +349,82 @@ const HomePage = () => {
         </Card>
 
         {loading && (
-          <div className="grid gap-4">
+          <div className="grid gap-6">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i} className="bg-card">
+              <Card key={i} className="bg-card shadow-lg rounded-lg">
                 <CardHeader>
                   <CardTitle>
-                    <Skeleton className="h-5 w-40 bg-muted" />
+                    <Skeleton className="h-6 w-48 bg-muted rounded" />
                   </CardTitle>
                   <CardDescription>
-                    <Skeleton className="h-4 w-24 bg-muted" />
+                    <Skeleton className="h-5 w-32 bg-muted rounded mt-1" />
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Skeleton className="h-[300px] w-full bg-muted" />
+                  <Skeleton className="h-[300px] w-full bg-muted rounded-md" />
                 </CardContent>
+                 <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
+                    <Skeleton className="h-10 w-full sm:w-40 bg-muted rounded-md" />
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <Skeleton className="h-10 w-1/2 sm:w-24 bg-muted rounded-md" />
+                        <Skeleton className="h-10 w-1/2 sm:w-32 bg-muted rounded-md" />
+                    </div>
+                </CardFooter>
               </Card>
             ))}
           </div>
         )}
 
          {!loading && routes && routes.length > 0 && (
-          <div className="grid gap-4">
+          <div className="grid gap-6">
+            <h2 className="text-2xl font-semibold text-primary mb-2">Generated Routes</h2>
             {routes.map((route, index) => (
               <RouteDisplay key={index} route={route} user={user} />
             ))}
           </div>
         )}
         {!loading && routes && routes.length === 0 && (
-           <Card className="bg-card">
+           <Card className="bg-card shadow-lg rounded-lg">
             <CardContent className="p-6">
-              <p className="text-muted-foreground">No routes found for the current selection. Try changing the location or radius.</p>
+              <div className="flex flex-col items-center justify-center text-center">
+                <Icons.search className="w-16 h-16 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium text-foreground">No Routes Found</p>
+                <p className="text-muted-foreground">Try adjusting the radius or selecting a different starting location.</p>
+              </div>
             </CardContent>
           </Card>
         )}
       </div>
+       <footer className="w-full max-w-4xl mx-auto mt-12 text-center">
+        <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} CycleZen. Happy Cycling!</p>
+      </footer>
     </div>
   );
 }
 
 export default function WrappedHomePage() {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    // Render nothing or a placeholder on the server to avoid hydration issues
+    // with components that rely on window or other client-side APIs like Google Maps.
+    return null; 
+  }
+  
   if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     return (
-      <div className="flex justify-center items-center min-h-screen p-4">
-        <Card className="max-w-md w-full">
+      <div className="flex justify-center items-center min-h-screen p-4 bg-secondary">
+        <Card className="max-w-md w-full bg-card shadow-xl rounded-xl">
           <CardHeader>
-            <CardTitle className="text-destructive">Configuration Error</CardTitle>
+            <CardTitle className="text-destructive text-2xl">Configuration Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Google Maps API key is missing. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment variables.</p>
+            <p className="text-foreground">The Google Maps API key is missing.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Please set the <code className="bg-muted px-1 py-0.5 rounded text-foreground">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> environment variable.</p>
             <p className="mt-2 text-sm text-muted-foreground">The map functionality cannot be loaded without this key.</p>
           </CardContent>
         </Card>
@@ -383,3 +437,6 @@ export default function WrappedHomePage() {
     </LoadScript>
   );
 }
+
+
+    
