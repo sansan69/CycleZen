@@ -159,11 +159,11 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
+      // Exclude route.geometry when saving
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates,
-        // geometry: route.geometry, // Excluded due to Firestore nested array limitations
+        coordinates: route.coordinates, 
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -297,11 +297,11 @@ const HomePage = () => {
     const envMessagingSenderId = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
     const envAppId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
-    let missingVarsLog: string[] = [];
-    if (!envApiKey) missingVarsLog.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
-    if (!envProjectId) missingVarsLog.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
-    if (!envAuthDomain) missingVarsLog.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
-    
+    let missingVars: string[] = [];
+    if (!envApiKey) missingVars.push("API Key");
+    if (!envProjectId) missingVars.push("Project ID");
+    if (!envAuthDomain) missingVars.push("Auth Domain");
+
     console.log("--- Firebase Config from Client Environment ---");
     console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
@@ -310,12 +310,12 @@ const HomePage = () => {
     console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "Not Set (Optional)");
     console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "Not Set (Optional)");
     console.log("----------------------------------------------");
-    
-    if (missingVarsLog.length > 0) {
-        const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
+
+    if (missingVars.length > 0) {
+        const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // setAuthLoading(true); // Keep authLoading true to disable auth buttons
+        setAuthLoading(true); // Keep authLoading true
         return; 
     }
     
@@ -359,9 +359,11 @@ const HomePage = () => {
             }
         }
         
-        description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. Current Origin: ${currentOrigin}. Configured Auth Domain: ${configuredAuthDomain}.
-        \nTroubleshooting steps:
-        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' (or the relevant domain) is listed.
+        description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
+        Current Origin: ${currentOrigin}. 
+        Configured Firebase Auth Domain in your .env.local: ${configuredAuthDomain}.
+        \nTroubleshooting:
+        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' (or the relevant domain from your app's URL) is listed.
         \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
         \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
@@ -528,31 +530,39 @@ const HomePage = () => {
         </div>
       </div>
 
-      <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8 text-center sm:text-right">
-        <div className="flex flex-col sm:flex-row justify-end items-center gap-2 sm:gap-3">
-          {authLoading ? (
-            <Button variant="outline" disabled>
+      <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8">
+        {authLoading ? (
+          <div className="flex justify-center items-center py-2">
+            <Button variant="outline" disabled className="w-full sm:w-auto">
               <Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Loading Auth...
             </Button>
-          ) : currentUser ? (
-            <>
+          </div>
+        ) : currentUser ? (
+          <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] sm:items-center gap-3 w-full">
+            <div className="w-full sm:w-auto order-2 sm:order-1 sm:justify-self-start">
               <Link href="/saved-routes" passHref>
-                <Button variant="outline">
+                <Button variant="outline" className="w-full">
                   <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
                 </Button>
               </Link>
-              <span className="text-sm text-foreground text-center sm:text-left">Hi, {currentUser.displayName || currentUser.email}</span>
-              <Button variant="outline" onClick={handleSignOut}>
+            </div>
+            <div className="text-sm text-foreground text-center order-1 sm:order-2 py-1 sm:py-0">
+              Hi, {currentUser.displayName || currentUser.email}
+            </div>
+            <div className="w-full sm:w-auto order-3 sm:order-3 sm:justify-self-end">
+              <Button variant="outline" onClick={handleSignOut} className="w-full">
                 <Icons.user className="mr-2 h-4 w-4" /> Logout
               </Button>
-            </>
-          ) : (
-            <Button variant="outline" onClick={handleGoogleSignIn}>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-center items-center py-2">
+            <Button variant="outline" onClick={handleGoogleSignIn} className="w-full sm:w-auto">
                <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 381.5 512 244 512 110.3 512 0 399.4 0 258.9 0 123.4 104.8 0 241.3 0c65.9 0 120.6 23.8 163.2 64.8l-66.6 52.9C285.5 91.7 257.9 80.5 230.2 80.5c-70.1 0-121.1 55.4-121.1 124.9s50.9 124.9 121.1 124.9c79.9 0 112.9-56.6 116.2-84H229.6v-64.9h153.3c2.7 14.5 5.1 30.4 5.1 46.5z"></path></svg>
               Login with Google
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </header>
       
       <main className="container mx-auto max-w-2xl p-4 sm:p-6 md:p-8">
@@ -578,7 +588,7 @@ const HomePage = () => {
                   value={radius}
                   onChange={(e) => {
                     const value = e.target.value;
-                    if (value === "" || /^\d*$/.test(value)) {
+                    if (value === "" || /^\d*$/.test(value)) { // Allow only digits or empty string
                       setRadius(value);
                     }
                   }}
@@ -676,6 +686,7 @@ export default HomePage;
     
 
     
+
 
 
 
