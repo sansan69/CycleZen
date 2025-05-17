@@ -30,7 +30,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   GoogleMap,
   Polyline,
-  Marker,
   LoadScript
 } from "@react-google-maps/api";
 
@@ -62,12 +61,49 @@ const RouteDisplay = ({
         lng: (minLng + maxLng) / 2,
       });
     } else {
-      setCenter({ lat: 0, lng: 0 });
+      setCenter({ lat: 0, lng: 0 }); // Fallback center
     }
   }, [route]);
 
-  const waypointsString = route.coordinates.map(coord => `${coord.lat},${coord.lng}`).join('|');
-  const routeUrl = `https://www.google.com/maps/dir/?api=1&travelmode=cycling&dir_action=navigate&waypoints=${waypointsString}`;
+  const MAX_GOOGLE_MAPS_WAYPOINTS = 10; // Max waypoints for a clean Google Maps URL
+
+  let waypointsForGoogleMaps: Coordinate[] = [];
+  if (route.coordinates && route.coordinates.length > 0) {
+    if (route.coordinates.length <= MAX_GOOGLE_MAPS_WAYPOINTS) {
+      waypointsForGoogleMaps = route.coordinates;
+    } else {
+      waypointsForGoogleMaps.push(route.coordinates[0]); // Start point
+
+      const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2;
+      const totalRoutePoints = route.coordinates.length;
+      const step = Math.floor((totalRoutePoints - 1) / (numIntermediatePoints + 1));
+
+      for (let i = 1; i <= numIntermediatePoints; i++) {
+        const waypointIndex = i * step;
+        if (waypointIndex < totalRoutePoints -1) { // ensure not to pick the last point again
+           waypointsForGoogleMaps.push(route.coordinates[waypointIndex]);
+        }
+      }
+      waypointsForGoogleMaps.push(route.coordinates[totalRoutePoints - 1]); // End point
+    }
+  }
+  
+  const waypointsString = waypointsForGoogleMaps
+    .map(coord => `${coord.lat},${coord.lng}`)
+    .join('|');
+
+  // The destination is the last waypoint if multiple are provided, otherwise it's implicitly the end of the loop.
+  // For a round trip starting and ending at the first waypoint, we can simplify.
+  // Google Maps will try to create a route visiting all waypoints.
+  const origin = waypointsForGoogleMaps.length > 0 ? `${waypointsForGoogleMaps[0].lat},${waypointsForGoogleMaps[0].lng}` : "";
+  const destination = waypointsForGoogleMaps.length > 1 ? `${waypointsForGoogleMaps[waypointsForGoogleMaps.length - 1].lat},${waypointsForGoogleMaps[waypointsForGoogleMaps.length - 1].lng}` : origin;
+  
+  const googleMapsWaypointsString = waypointsForGoogleMaps.length > 2 
+    ? waypointsForGoogleMaps.slice(1, -1).map(coord => `${coord.lat},${coord.lng}`).join('|')
+    : "";
+
+  const routeUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${googleMapsWaypointsString}&travelmode=cycling`;
+
 
   const handleSaveRoute = async () => {
     if (!user) {
@@ -82,7 +118,7 @@ const RouteDisplay = ({
     try {
       const docRef = await addDoc(collection(db, "routes"), {
         userId: user.uid,
-        routeData: route,
+        routeData: route, // Save the full detailed route
         timestamp: new Date(),
       });
       toast({
@@ -113,15 +149,20 @@ const RouteDisplay = ({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <GoogleMap mapContainerStyle={mapStyles} zoom={10} center={center} >
-          <Polyline path={route.coordinates} options={{ strokeColor: "#FF0000", strokeWeight: 2 }} />
-        </GoogleMap>
+        {/* Check if googleMapsApiKey is available before rendering GoogleMap */}
+        {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && center ? (
+          <GoogleMap mapContainerStyle={mapStyles} zoom={10} center={center} >
+            <Polyline path={route.coordinates} options={{ strokeColor: "#FF0000", strokeWeight: 2 }} />
+          </GoogleMap>
+        ) : (
+          <Skeleton className="h-[300px] w-full" />
+        )}
       </CardContent>
       <CardFooter className="flex justify-between">
         <Button asChild>
           <a href={routeUrl} target='_blank' rel="noopener noreferrer">Open in Google Maps</a>
         </Button>
-        <UiButton onClick={handleSaveRoute}>Save this route</UiButton>
+        <UiButton onClick={handleSaveRoute} disabled={!user}>Save this route</UiButton>
       </CardFooter>
     </Card>
   );
@@ -137,7 +178,7 @@ const HomePage = () => {
   const { toast } = useToast();
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
 
-  const handleGenerateRoutes = async () => {
+  const handleGenerateRoutes = useCallback(async () => {
     if (!selectedLocation) {
       toast({
         title: "Location Required",
@@ -185,7 +226,7 @@ const HomePage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedLocation, radius, toast]);
 
   const handleLocationSelected = useCallback((location: Coordinate) => {
     setSelectedLocation(location);
@@ -223,6 +264,7 @@ const HomePage = () => {
                 onChange={(e) => setRadius(Number(e.target.value))}
                 placeholder="Enter radius in km"
                 className="bg-background border-input"
+                min="1" // Ensure radius is positive
               />
             </div>
 
@@ -233,7 +275,11 @@ const HomePage = () => {
              />
             )}
             {!showMapInput && selectedLocation && (
-              <Button variant="outline" onClick={() => setShowMapInput(true)}>Change Start Location</Button>
+              <div className="text-sm p-2 bg-muted rounded-md">
+                <p className="font-semibold">Starting Location:</p>
+                <p>Lat: {selectedLocation.lat.toFixed(4)}, Lng: {selectedLocation.lng.toFixed(4)}</p>
+                 <Button variant="outline" size="sm" className="mt-2" onClick={() => setShowMapInput(true)}>Change Start Location</Button>
+              </div>
             )}
 
 
@@ -267,7 +313,7 @@ const HomePage = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Skeleton className="h-32 w-full bg-muted" />
+                  <Skeleton className="h-[300px] w-full bg-muted" />
                 </CardContent>
               </Card>
             ))}
@@ -294,7 +340,8 @@ const HomePage = () => {
 }
 
 export default function WrappedHomePage() {
-  if (!googleMapsApiKey) {
+  // Ensure API key is present before attempting to load the script
+  if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     return (
       <div className="flex justify-center items-center min-h-screen p-4">
         <Card className="max-w-md w-full">
@@ -310,8 +357,9 @@ export default function WrappedHomePage() {
     );
   }
   return (
-    <LoadScript googleMapsApiKey={googleMapsApiKey} libraries={['places']}>
+    <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY} libraries={['places']}>
       <HomePage />
     </LoadScript>
   );
 }
+
