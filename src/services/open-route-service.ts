@@ -37,7 +37,7 @@ export interface CyclingRoute {
   /**
    * The raw geometry string, if needed for other purposes (optional)
    */
-  geometry?: string; 
+  geometry?: string;
 }
 
 /**
@@ -52,9 +52,9 @@ export async function getCyclingRoutes(
   location: Coordinate,
   radius: number, // This radius is used for round_trip.length
   numberOfRoutes: number = 3
-): Promise<CyclingRoute[]> {  
+): Promise<CyclingRoute[]> {
   const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
-  
+
   const cyclingRoutes: CyclingRoute[] = [];
   const maxTriesPerRoute = 2; // Try a couple of times per route if random points fail
 
@@ -91,7 +91,7 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
   // The spread of these points might need to be relative to targetLengthMeters.
   // For now, using a fixed spread as in the original getRandomPoint.
   const randomIntermediatePoints = getRandomPoints(startLocation, 2, 3, targetLengthMeters * 0.1); // Spread based on 10% of target length
-  
+
   const profile = "cycling-regular";
   const url = `https://api.openrouteservice.org/v2/directions/${profile}/geojson`;
 
@@ -109,9 +109,9 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
         "points": Math.floor(coordinatesPayload.length / 2) , // Optional: influence number of points in generated round trip
         "seed": Math.floor(Math.random() * 1000) // Add randomness to ORS generation
       },
-      "avoid_features": ["fords", "ferries"], // Keep dead_ends avoidance if desired, but it might be too restrictive. ORS default usually handles this well.
-      "preference": "recommended", // Or 'fastest', 'shortest'
+      "avoid_features": ["fords", "ferries"],
     },
+    "preference": "recommended", // Moved from options to root
     "geometry_simplify": "true", // Simplify geometry to reduce payload
     "maximum_speed": 40 // Cycling speed limit
   };
@@ -154,7 +154,7 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
   if (!feature.geometry || feature.geometry.type !== 'LineString') {
     throw new Error("Invalid geometry type in OpenRouteService API response.");
   }
-  
+
   const routeCoordinates: Coordinate[] = feature.geometry.coordinates.map(
     ([lng, lat]: number[]) => ({ lat, lng })
   );
@@ -203,12 +203,10 @@ function getRandomPoints(center: Coordinate, minPoints: number, maxPoints: numbe
     // Add random offset to make points less predictable
     const latOffset = distanceLat * Math.sin(angle);
     const lngOffset = distanceLng * Math.cos(angle);
-    
+
     const randomLat = center.lat + latOffset;
     const randomLng = center.lng + lngOffset;
     points.push([randomLng, randomLat]);
   }
   return points;
 }
-
-    
