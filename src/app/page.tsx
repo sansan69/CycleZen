@@ -10,7 +10,7 @@ import {
   addDoc,
 } from "firebase/firestore";
 
-import { db } from "@/lib/firebase.ts";
+import { db } from "@/lib/firebase";
 import { 
   signInWithGoogle, 
   signOutUser, 
@@ -259,7 +259,7 @@ const HomePage = () => {
         if (authDomainMissing) missingVars.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
         
         const message = `${missingVars.join(", ")} is missing or empty. Authentication is unavailable.`;
-        toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive" });
+        toast({ title: "Configuration Error", description: `${message} Please check your .env file and restart the server.`, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL: ${message}`);
         // authLoading remains true to disable auth buttons
         return; 
@@ -487,4 +487,6 @@ const HomePage = () => {
 };
 
 export default HomePage;
+    
+
     
