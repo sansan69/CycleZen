@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider"; // Import Slider
+import { Slider } from "@/components/ui/slider"; 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
@@ -162,7 +162,7 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, // This is Firestore compatible: array of {lat, lng} objects
+        coordinates: route.coordinates,
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -469,6 +469,7 @@ const HomePage = () => {
 
   const currentRadiusValue = parseInt(radius, 10);
   const displayRadius = !isNaN(currentRadiusValue) && currentRadiusValue >=5 && currentRadiusValue <=100 ? currentRadiusValue : (radius === "" ? "" : 5);
+  const numericRadiusForMap = isRadiusValid(radius) ? parseInt(radius, 10) : null;
 
 
   return (
@@ -616,6 +617,7 @@ const HomePage = () => {
                 <GoogleMapComponent
                   onLocationSelected={handleLocationSelected}
                   googleMapsApiKey={googleMapsApiKey}
+                  searchRadiusKm={numericRadiusForMap}
                 />
               </div>
             )}

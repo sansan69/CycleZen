@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, Marker, Circle, useJsApiLoader } from '@react-google-maps/api';
 import type { Coordinate } from '@/services/open-route-service';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 interface GoogleMapComponentProps {
   onLocationSelected: (location: Coordinate) => void;
   googleMapsApiKey: string;
+  searchRadiusKm?: number | null;
 }
 
 const defaultCenter: Coordinate = {
@@ -18,15 +19,16 @@ const defaultCenter: Coordinate = {
   lng: -118.243683,
 };
 
-const GOOGLE_MAPS_LIBRARIES: ('places')[] = ['places'];
+const GOOGLE_MAPS_LIBRARIES = ['places'] as ('places')[]; // Ensure stable reference
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
   googleMapsApiKey,
+  searchRadiusKm,
 }) => {
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
-  const [loading, setLoading] = useState<boolean>(true); // Start with loading true
+  const [loading, setLoading] = useState<boolean>(true); 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const mapRef = useRef<google.maps.Map>();
@@ -34,6 +36,19 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const mapOptions = {
     disableDefaultUI: true,
     zoomControl: true,
+  };
+
+  const circleOptions = {
+    strokeColor: "hsl(var(--accent))", 
+    strokeOpacity: 0.8,
+    strokeWeight: 2,
+    fillColor: "hsl(var(--accent))", 
+    fillOpacity: 0.20, // Slightly more transparent fill
+    clickable: false,
+    draggable: false,
+    editable: false,
+    visible: true,
+    zIndex: 1,
   };
 
   const { isLoaded, loadError: apiLoadError } = useJsApiLoader({
@@ -61,12 +76,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     }
 
     if (!isLoaded) {
-      // This case is mostly for direct calls like from the button,
-      // as the useEffect usually waits for isLoaded.
-      console.warn("getLocation called before Google Maps API script is loaded.");
-      // setError("Google Maps API not loaded yet."); // Optionally set error
-      // toast({ title: "Map Loading", description: "Google Maps is still initializing.", variant: "default" });
-      setLoading(false); // Or keep true if useEffect will re-trigger
+      setLoading(false); 
       return;
     }
 
@@ -79,7 +89,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       return;
     }
 
-    // 1. Check permission status first
     if (navigator.permissions && navigator.permissions.query) {
       try {
         const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
@@ -101,21 +110,17 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             description: "CycleZen needs your location to enhance your experience. Please grant permission when prompted.",
             duration: 7000,
           });
-          // Proceed to getCurrentPosition which will trigger the actual browser prompt
         }
-        // If 'granted', proceed silently.
       } catch (permError: any) {
         console.warn("Could not query geolocation permission status:", permError.message, "Proceeding to attempt fetching location.");
-        // Fallback to trying getCurrentPosition directly if query fails
       }
     }
 
-    // 2. Attempt to get current position
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           const options: PositionOptions = {
             enableHighAccuracy: true,
-            timeout: 12000, // Slightly increased timeout
+            timeout: 12000, 
             maximumAge: 0,
           };
           navigator.geolocation.getCurrentPosition(resolve, reject, options);
@@ -130,13 +135,13 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       let toastTitle = "Location Error";
       let toastDescription = "Could not retrieve your location. Please manually select a location on the map.";
       
-      if (err.code === 1) { // PERMISSION_DENIED
+      if (err.code === 1) { 
           toastTitle = "Location Access Denied";
           toastDescription = "Location access was denied. Please enable it in your browser/OS settings and grant permission to CycleZen. You can still manually select a location.";
-      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+      } else if (err.code === 2) { 
           toastTitle = "Location Services Off?";
           toastDescription = "Could not determine your location. Please ensure your device's GPS/location services are turned on and try again. You can still manually select a location.";
-      } else if (err.code === 3) { // TIMEOUT
+      } else if (err.code === 3) { 
           toastTitle = "Location Timeout";
           toastDescription = "Getting location timed out. Ensure GPS/location services are on and try again, or select a location manually on the map.";
       } else if (err.message && (err.message.toLowerCase().includes("permissions policy") || err.message.toLowerCase().includes("disabled in this document"))) {
@@ -150,16 +155,14 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         variant: "destructive",
         duration: 10000,
       });
-      setCurrentLocation(defaultCenter); // Fallback to default
-      setSelectedLocation(defaultCenter); // Fallback to default
+      setCurrentLocation(defaultCenter); 
+      setSelectedLocation(defaultCenter); 
     } finally {
       setLoading(false);
     }
-  }, [toast, googleMapsApiKey, isLoaded]); // isLoaded and googleMapsApiKey are crucial here
+  }, [toast, googleMapsApiKey, isLoaded]); 
 
   useEffect(() => {
-    // This effect calls getLocation when the component mounts and when its dependencies (API key, Maps script loaded state) change.
-    // getLocation itself now contains the checks for these dependencies.
     getLocation();
   }, [getLocation]);
 
@@ -171,7 +174,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     } else if (currentLocation) {
         map.panTo(currentLocation);
     } else if (mapRef.current && defaultCenter) {
-        mapRef.current.panTo(defaultCenter); // Ensure map pans to default if everything else is null
+        mapRef.current.panTo(defaultCenter); 
     }
   }, [selectedLocation, currentLocation]);
 
@@ -201,7 +204,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  // Display a more persistent loading state until either location is found or an error causes fallback
   if (loading && !currentLocation && !error) {
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
@@ -211,7 +213,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
 
-  // If an error occurred and we fell back to default, but map script is still loading
   if (!isLoaded && error) {
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md text-center p-4">
@@ -226,7 +227,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
   return (
     <div className="relative h-[400px] w-full rounded-md overflow-hidden shadow-md border border-border">
-      {isLoaded && (currentLocation || selectedLocation || defaultCenter) ? ( // Ensure defaultCenter is also a condition
+      {isLoaded && (currentLocation || selectedLocation || defaultCenter) ? ( 
         <>
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
@@ -247,6 +248,13 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
                 onDragEnd={onMarkerDragEnd}
               />
             )}
+            {selectedLocation && searchRadiusKm && searchRadiusKm > 0 && (
+              <Circle
+                center={selectedLocation}
+                radius={searchRadiusKm * 1000} // Convert km to meters
+                options={circleOptions}
+              />
+            )}
           </GoogleMap>
           <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-background/80 backdrop-blur-sm p-2 rounded-md shadow-lg text-xs text-foreground">
             {selectedLocation ? (
@@ -263,7 +271,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             variant="outline"
             size="sm"
             className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm hover:bg-background"
-            onClick={getLocation} // Re-trigger the full getLocation logic
+            onClick={getLocation} 
             disabled={loading}
             >
              <Icons.locate className="h-4 w-4 mr-1"/> {loading ? "Locating..." : "My Location"}
@@ -282,3 +290,4 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 };
 
 export default GoogleMapComponent;
+
