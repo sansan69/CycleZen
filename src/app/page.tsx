@@ -153,6 +153,7 @@ const RouteDisplay = ({
         distance: route.distance,
         estimatedTime: route.estimatedTime,
         coordinates: route.coordinates, 
+        // geometry: route.geometry, // Excluded to prevent Firestore error
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -435,7 +436,7 @@ const HomePage = () => {
           fill
           style={{ objectFit: 'cover' }}
           priority 
-          data-ai-hint="cycling sunset"
+          data-ai-hint="cycling background"
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/80 p-4">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight">
