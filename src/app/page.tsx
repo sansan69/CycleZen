@@ -9,6 +9,7 @@ import {
   collection,
   addDoc,
 } from "firebase/firestore";
+import Link from "next/link";
 
 import { db } from "@/lib/firebase";
 import { 
@@ -145,18 +146,16 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      // Prepare the route data, ensuring no nested arrays problematic for Firestore
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, // This is Array<{lat:number, lng:number}> - OK
-        // geometry: route.geometry, // This was the issue as route.geometry (GeoJSON object) contains a nested array in its own 'coordinates' field
+        coordinates: route.coordinates, 
       };
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
         timestamp: new Date(),
-        routeName: `Route near ${user.displayName || 'selected location'} on ${new Date().toLocaleDateString()}`,
+        routeName: `Route near ${selectedLocation ? `${selectedLocation.lat.toFixed(2)}, ${selectedLocation.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
       });
       toast({
@@ -165,9 +164,15 @@ const RouteDisplay = ({
       });
     } catch (error: any) {
       console.error("Error saving route:", error);
+      let description = "Failed to save route. Please try again.";
+      if (error.message && error.message.includes("Nested arrays are not supported")) {
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). Please ensure route.geometry is not included in the save.";
+      } else if (error.message) {
+        description = error.message;
+      }
       toast({
         title: "Save Error",
-        description: error.message || "Failed to save route. Please try again.",
+        description: description,
         variant: "destructive",
       });
     }
@@ -237,6 +242,7 @@ const RouteDisplay = ({
 };
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+let selectedLocation: Coordinate | null = null; // Used by handleSaveRoute to name the route
 
 const HomePage = () => {
   const [radius, setRadius] = useState<number>(5);
@@ -244,7 +250,7 @@ const HomePage = () => {
   const [routes, setRoutes] = useState<CyclingRoute[] | null>(null);
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
   const { toast } = useToast();
-  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
+  const [_selectedLocation, _setSelectedLocation] = useState<Coordinate | null>(null);
   const previousSelectedLocationRef = useRef<Coordinate | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -308,7 +314,6 @@ const HomePage = () => {
     try {
       await signInWithGoogle();
       toast({ title: "Signed In", description: "Successfully signed in with Google." });
-      // onAuthUserChanged will update currentUser and setAuthLoading(false)
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
@@ -330,7 +335,7 @@ const HomePage = () => {
 
         description = `Error: Your app's current domain ('${currentOrigin}') is not authorized for Google Sign-In. 
         \nTroubleshooting steps:
-        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
+        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed. The current origin is: ${window.location.origin}. The auth domain from env is: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}.
         \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
         \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
         \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
@@ -353,7 +358,7 @@ const HomePage = () => {
 
 
   const handleGenerateRoutes = useCallback(async () => {
-    if (!selectedLocation) {
+    if (!_selectedLocation) {
       toast({
         title: "Location Required",
         description: "Please select a location before generating routes.",
@@ -375,7 +380,7 @@ const HomePage = () => {
         setLoadingRoutes(false);
         return;
       }
-      const generatedRoutes = await getCyclingRoutes(selectedLocation, radius, 3);
+      const generatedRoutes = await getCyclingRoutes(_selectedLocation, radius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false); 
@@ -390,7 +395,7 @@ const HomePage = () => {
           variant: "default", 
         });
       }
-    } catch (error: any) {
+    } catch (error: any)      {
       console.error("Error generating routes:", error);
       toast({
         title: "Route Generation Error",
@@ -400,44 +405,48 @@ const HomePage = () => {
     } finally {
       setLoadingRoutes(false);
     }
-  }, [selectedLocation, radius, toast]);
+  }, [_selectedLocation, radius, toast]);
   
-  const handleLocationSelected = useCallback((location: Coordinate) => {
-    setSelectedLocation(location);
+  const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
+    _setSelectedLocation(locationFromMap);
+    selectedLocation = locationFromMap; // Keep the global `selectedLocation` updated for RouteDisplay's handleSaveRoute
   }, []); 
 
   useEffect(() => {
-    if (selectedLocation) {
-      // Only show toast if the location has actually changed from the previous one
+    if (_selectedLocation) {
       if (previousSelectedLocationRef.current &&
-          (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
-           previousSelectedLocationRef.current.lng !== selectedLocation.lng)) {
+          (previousSelectedLocationRef.current.lat !== _selectedLocation.lat ||
+           previousSelectedLocationRef.current.lng !== _selectedLocation.lng)) {
         toast({
           title: 'Location Updated',
-          description: `New location selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
+          description: `New location selected: ${_selectedLocation.lat.toFixed(4)}, ${_selectedLocation.lng.toFixed(4)}`,
         });
       }
-      // Update the ref to the current selected location for the next comparison
-      previousSelectedLocationRef.current = selectedLocation;
+      previousSelectedLocationRef.current = _selectedLocation;
     }
-  }, [selectedLocation, toast]); // Depend on selectedLocation and toast
+  }, [_selectedLocation, toast]); 
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
       <Toaster />
       <header className="w-full max-w-4xl mx-auto mb-6 text-center">
-        <div className="flex justify-end items-center mb-4">
+        <div className="flex justify-end items-center mb-4 gap-3">
           {authLoading ? (
             <Button variant="outline" disabled>
               <Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Loading Auth...
             </Button>
           ) : currentUser ? (
-            <div className="flex items-center gap-3">
+            <>
+              <Link href="/saved-routes" passHref>
+                <Button variant="outline">
+                  <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
+                </Button>
+              </Link>
               <span className="text-sm text-foreground">Hi, {currentUser.displayName || currentUser.email}</span>
               <Button variant="outline" onClick={handleSignOut}>
                 <Icons.user className="mr-2 h-4 w-4" /> Logout
               </Button>
-            </div>
+            </>
           ) : (
             <Button variant="outline" onClick={handleGoogleSignIn}>
                <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 381.5 512 244 512 110.3 512 0 399.4 0 258.9 0 123.4 104.8 0 241.3 0c65.9 0 120.6 23.8 163.2 64.8l-66.6 52.9C285.5 91.7 257.9 80.5 230.2 80.5c-70.1 0-121.1 55.4-121.1 124.9s50.9 124.9 121.1 124.9c79.9 0 112.9-56.6 116.2-84H229.6v-64.9h153.3c2.7 14.5 5.1 30.4 5.1 46.5z"></path></svg>
@@ -483,10 +492,10 @@ const HomePage = () => {
                 />
               </div>
             )}
-            {!showMapInput && selectedLocation && (
+            {!showMapInput && _selectedLocation && (
               <div className="text-sm p-3 bg-muted rounded-md border border-border">
                 <p className="font-semibold text-foreground">Starting Location:</p>
-                <p className="text-muted-foreground">Lat: {selectedLocation.lat.toFixed(4)}, Lng: {selectedLocation.lng.toFixed(4)}</p>
+                <p className="text-muted-foreground">Lat: {_selectedLocation.lat.toFixed(4)}, Lng: {_selectedLocation.lng.toFixed(4)}</p>
                 <Button onClick={() => { setShowMapInput(true); setRoutes(null); }} variant="link" className="p-0 h-auto text-accent mt-1">
                   Change location
                 </Button>
@@ -494,7 +503,7 @@ const HomePage = () => {
             )}
           </CardContent>
           <CardFooter className="pt-6">
-            <Button onClick={handleGenerateRoutes} disabled={loadingRoutes || !selectedLocation} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button onClick={handleGenerateRoutes} disabled={loadingRoutes || !_selectedLocation} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
               {loadingRoutes ? (
                 <><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
               ) : "Generate Routes"}
@@ -526,11 +535,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-    
-
-    
-
-
-
-    
-
