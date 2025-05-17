@@ -150,6 +150,7 @@ const RouteDisplay = ({
         distance: route.distance,
         estimatedTime: route.estimatedTime,
         coordinates: route.coordinates, 
+        // geometry: route.geometry, // Removed: Causes Firestore nested array error
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -268,7 +269,7 @@ const HomePage = () => {
     if (!envApiKey) missingVarsLog.push("API Key (NEXT_PUBLIC_FIREBASE_API_KEY)");
     if (!envProjectId) missingVarsLog.push("Project ID (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
     if (!envAuthDomain) missingVarsLog.push("Auth Domain (NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN)");
-    // Optional vars, log if present or not for completeness
+    
     console.log("--- Firebase Config from Client Environment ---");
     console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
@@ -350,9 +351,6 @@ const HomePage = () => {
       // onAuthUserChanged will update currentUser and setAuthLoading(false)
       toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {      
-      // onAuthUserChanged should still fire and setAuthLoading(false)
-      // but if signOutUser itself throws an error before onAuthUserChanged can react
-      // we need to ensure authLoading is false.
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
       setAuthLoading(false); 
@@ -416,7 +414,7 @@ const HomePage = () => {
   }, []); 
 
   useEffect(() => {
-    if (_selectedLocation && previousSelectedLocationRef.current) { // Only toast if there was a previous location
+    if (_selectedLocation && previousSelectedLocationRef.current) { 
       if (previousSelectedLocationRef.current.lat !== _selectedLocation.lat ||
           previousSelectedLocationRef.current.lng !== _selectedLocation.lng) {
         toast({
@@ -425,14 +423,14 @@ const HomePage = () => {
         });
       }
     }
-    previousSelectedLocationRef.current = _selectedLocation; // Update ref after potential toast or on first set
+    previousSelectedLocationRef.current = _selectedLocation; 
   }, [_selectedLocation, toast]); 
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
       <Toaster />
       <header className="w-full max-w-4xl mx-auto mb-6 text-center">
-        <div className="flex justify-end items-center mb-4 gap-3">
+        <div className="flex flex-col sm:flex-row justify-end items-center sm:items-center mb-4 gap-2 sm:gap-3">
           {authLoading ? (
             <Button variant="outline" disabled>
               <Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Loading Auth...
@@ -444,7 +442,7 @@ const HomePage = () => {
                   <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
                 </Button>
               </Link>
-              <span className="text-sm text-foreground">Hi, {currentUser.displayName || currentUser.email}</span>
+              <span className="text-sm text-foreground text-center sm:text-left">Hi, {currentUser.displayName || currentUser.email}</span>
               <Button variant="outline" onClick={handleSignOut}>
                 <Icons.user className="mr-2 h-4 w-4" /> Logout
               </Button>
@@ -537,4 +535,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
