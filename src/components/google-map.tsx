@@ -18,18 +18,15 @@ const defaultCenter: Coordinate = {
   lng: -118.243683,
 };
 
-// Define libraries as a constant outside the component
-const GOOGLE_MAPS_LIBRARIES: ("places")[] = ['places'];
+const GOOGLE_MAPS_LIBRARIES: ('places')[] = ['places'];
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
   googleMapsApiKey,
 }) => {
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(
-    null
-  );
-  const [loading, setLoading] = useState<boolean>(true);
+  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
+  const [loading, setLoading] = useState<boolean>(true); // Start with loading true
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const mapRef = useRef<google.maps.Map>();
@@ -42,74 +39,130 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const { isLoaded, loadError: apiLoadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: googleMapsApiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES, 
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
-  useEffect(() => {
-    const getLocation = async () => {
-      setLoading(true);
-      setError(null);
+  const getLocation = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-      try {
-        if (!navigator.geolocation) {
-          throw new Error('Geolocation is not supported by your browser.');
-        }
-
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            const options: PositionOptions = {
-              enableHighAccuracy: true,
-              timeout: 10000, // Increased timeout
-              maximumAge: 0,
-            };
-            
-            navigator.geolocation.getCurrentPosition(resolve, reject, options);
-        });
-          
-        const { latitude, longitude } = position.coords;
-
-        setCurrentLocation({ lat: latitude, lng: longitude });
-        setSelectedLocation({ lat: latitude, lng: longitude }); 
-      } catch (err: any) {
-        console.error('Error getting location:', err.message, err.code, err.name);
-        setError(err.message);
-        let toastDescription = "Could not retrieve your location. Please manually select a location or check permissions.";
-        
-        if (err.code === 1 || (err.message && (err.message.toLowerCase().includes("permission denied") || err.message.toLowerCase().includes("permissions policy")))) {
-            toastDescription = "Location access denied. Please check your browser and operating system location settings and grant permission to this site. You can still manually select a location on the map.";
-        } else if (err.code === 2) { // POSITION_UNAVAILABLE
-            toastDescription = "Location information is unavailable. Please ensure your device's location services (GPS) are turned on and try again. You can also select a location manually on the map.";
-        } else if (err.code === 3) { // TIMEOUT
-            toastDescription = "Getting location timed out. This can happen if location services are off or taking too long. Please check your device's location settings (GPS) and try again, or select a location manually on the map.";
-        } else if (err.message) {
-            toastDescription = err.message;
-        }
-
-        toast({
-          title: "Location Error",
-          description: toastDescription,
-          variant: "destructive",
-          duration: 7000,
-        });
-        setCurrentLocation(defaultCenter);
-        setSelectedLocation(defaultCenter);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (googleMapsApiKey && isLoaded) {
-      getLocation();
-    } else if (!googleMapsApiKey) {
-      setLoading(false);
+    if (!googleMapsApiKey) {
       setError('Google Maps API key is missing.');
       toast({
         title: "API Key Missing",
-        description:
-          "Google Maps API key is missing. Please configure it to use the map.",
+        description: "Google Maps API key is missing. Map functionality will be limited.",
         variant: "destructive",
+        duration: 10000,
       });
+      setCurrentLocation(defaultCenter);
+      setSelectedLocation(defaultCenter);
+      setLoading(false);
+      return;
     }
-  }, [isLoaded, googleMapsApiKey, toast]);
+
+    if (!isLoaded) {
+      // This case is mostly for direct calls like from the button,
+      // as the useEffect usually waits for isLoaded.
+      console.warn("getLocation called before Google Maps API script is loaded.");
+      // setError("Google Maps API not loaded yet."); // Optionally set error
+      // toast({ title: "Map Loading", description: "Google Maps is still initializing.", variant: "default" });
+      setLoading(false); // Or keep true if useEffect will re-trigger
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      toast({ title: "Geolocation Error", description: "Geolocation is not supported by your browser. Please select a location manually.", variant: "destructive", duration: 7000 });
+      setCurrentLocation(defaultCenter);
+      setSelectedLocation(defaultCenter);
+      setLoading(false);
+      return;
+    }
+
+    // 1. Check permission status first
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        if (permissionStatus.state === 'denied') {
+          setError('Location permission denied by user or policy.');
+          toast({
+            title: "Location Permission Required",
+            description: "Location permission was denied. Please enable it in your browser/OS settings for CycleZen to determine your current location. You can still manually select a location on the map.",
+            variant: "destructive",
+            duration: 10000,
+          });
+          setCurrentLocation(defaultCenter);
+          setSelectedLocation(defaultCenter);
+          setLoading(false);
+          return;
+        } else if (permissionStatus.state === 'prompt') {
+          toast({
+            title: "Location Access",
+            description: "CycleZen needs your location to enhance your experience. Please grant permission when prompted.",
+            duration: 7000,
+          });
+          // Proceed to getCurrentPosition which will trigger the actual browser prompt
+        }
+        // If 'granted', proceed silently.
+      } catch (permError: any) {
+        console.warn("Could not query geolocation permission status:", permError.message, "Proceeding to attempt fetching location.");
+        // Fallback to trying getCurrentPosition directly if query fails
+      }
+    }
+
+    // 2. Attempt to get current position
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          const options: PositionOptions = {
+            enableHighAccuracy: true,
+            timeout: 12000, // Slightly increased timeout
+            maximumAge: 0,
+          };
+          navigator.geolocation.getCurrentPosition(resolve, reject, options);
+      });
+        
+      const { latitude, longitude } = position.coords;
+      setCurrentLocation({ lat: latitude, lng: longitude });
+      setSelectedLocation({ lat: latitude, lng: longitude });
+    } catch (err: any) {
+      console.error('Error getting location (getCurrentPosition):', err.message, err.code, err.name);
+      setError(err.message);
+      let toastTitle = "Location Error";
+      let toastDescription = "Could not retrieve your location. Please manually select a location on the map.";
+      
+      if (err.code === 1) { // PERMISSION_DENIED
+          toastTitle = "Location Access Denied";
+          toastDescription = "Location access was denied. Please enable it in your browser/OS settings and grant permission to CycleZen. You can still manually select a location.";
+      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+          toastTitle = "Location Services Off?";
+          toastDescription = "Could not determine your location. Please ensure your device's GPS/location services are turned on and try again. You can still manually select a location.";
+      } else if (err.code === 3) { // TIMEOUT
+          toastTitle = "Location Timeout";
+          toastDescription = "Getting location timed out. Ensure GPS/location services are on and try again, or select a location manually on the map.";
+      } else if (err.message && (err.message.toLowerCase().includes("permissions policy") || err.message.toLowerCase().includes("disabled in this document"))) {
+          toastTitle = "Location Permission Blocked";
+          toastDescription = "Geolocation has been disabled by a permissions policy. Please check your browser and OS location settings for CycleZen and grant permission. You can still manually select a location.";
+      }
+
+      toast({
+        title: toastTitle,
+        description: toastDescription,
+        variant: "destructive",
+        duration: 10000,
+      });
+      setCurrentLocation(defaultCenter); // Fallback to default
+      setSelectedLocation(defaultCenter); // Fallback to default
+    } finally {
+      setLoading(false);
+    }
+  }, [toast, googleMapsApiKey, isLoaded]); // isLoaded and googleMapsApiKey are crucial here
+
+  useEffect(() => {
+    // This effect calls getLocation when the component mounts and when its dependencies (API key, Maps script loaded state) change.
+    // getLocation itself now contains the checks for these dependencies.
+    getLocation();
+  }, [getLocation]);
+
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -117,6 +170,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         map.panTo(selectedLocation);
     } else if (currentLocation) {
         map.panTo(currentLocation);
+    } else if (mapRef.current && defaultCenter) {
+        mapRef.current.panTo(defaultCenter); // Ensure map pans to default if everything else is null
     }
   }, [selectedLocation, currentLocation]);
 
@@ -139,38 +194,39 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
   if (apiLoadError) {
     return (
-      <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10">
-        Error loading Google Maps: {apiLoadError.message}. Please check your API key and internet connection.
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
-        <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
-        <p className="text-foreground">Loading location and map...</p>
+      <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10 h-[400px] w-full flex flex-col items-center justify-center text-center">
+        <p className="font-semibold">Error loading Google Maps API: {apiLoadError.message}</p>
+        <p className="text-sm mt-1">Please check your internet connection and the Google Maps API key configuration.</p>
       </div>
     );
   }
   
-  if (error && !currentLocation) {
-     return (
-        <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10 h-[400px] w-full flex flex-col items-center justify-center text-center">
-          <p className="font-semibold">Map Error: {error}</p>
-          <p className="text-sm mt-2">Please ensure location services are enabled and permissions are granted for this site in your browser and OS settings.</p>
-          <p className="text-sm mt-1">You can still manually select a location by dragging the marker if the map loads with a default location.</p>
-           {isLoaded && (
-             <div className="mt-4 text-foreground">Loading map with default location...</div>
-           )}
-        </div>
-      );
+  // Display a more persistent loading state until either location is found or an error causes fallback
+  if (loading && !currentLocation && !error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
+        <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
+        <p className="text-foreground">Detecting location and initializing map...</p>
+      </div>
+    );
+  }
+
+  // If an error occurred and we fell back to default, but map script is still loading
+  if (!isLoaded && error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md text-center p-4">
+        <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
+        <p className="text-foreground">Map is initializing...</p>
+        <p className="text-sm text-destructive mt-2">{error}</p>
+        <p className="text-xs text-muted-foreground mt-1">Attempting to load map with default location.</p>
+      </div>
+    );
   }
 
 
   return (
     <div className="relative h-[400px] w-full rounded-md overflow-hidden shadow-md border border-border">
-      {isLoaded && (currentLocation || selectedLocation) ? (
+      {isLoaded && (currentLocation || selectedLocation || defaultCenter) ? ( // Ensure defaultCenter is also a condition
         <>
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
@@ -195,6 +251,10 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-background/80 backdrop-blur-sm p-2 rounded-md shadow-lg text-xs text-foreground">
             {selectedLocation ? (
               `Selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`
+            ) : currentLocation ? (
+              `Current: ${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`
+            ) : error ? (
+                "Using default location"
             ) : (
               "Detecting location..."
             )}
@@ -203,44 +263,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             variant="outline"
             size="sm"
             className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm hover:bg-background"
-            onClick={() => {
-                if (isLoaded) {
-                     setError(null);
-                     setLoading(true);
-                     navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const { latitude, longitude } = position.coords;
-                            setCurrentLocation({ lat: latitude, lng: longitude });
-                            setSelectedLocation({ lat: latitude, lng: longitude });
-                            setLoading(false);
-                        },
-                        (err) => {
-                            console.error('Error re-getting location:', err.message, err.code);
-                            setError(err.message);
-                            let toastDescription = "Could not retrieve your location. Please check permissions.";
-                             if (err.code === 1 || (err.message && (err.message.toLowerCase().includes("permission denied") || err.message.toLowerCase().includes("permissions policy")))) {
-                                toastDescription = "Location access denied. Please check your browser and OS settings.";
-                            } else if (err.code === 2) { // POSITION_UNAVAILABLE
-                                toastDescription = "Location information is unavailable. Please ensure your device's location services (GPS) are turned on and try again.";
-                            } else if (err.code === 3) { // TIMEOUT
-                                toastDescription = "Getting location timed out. This can happen if location services are off or taking too long. Please check your device's location settings (GPS) and try again.";
-                            } else if (err.message) {
-                                toastDescription = err.message;
-                            }
-                             toast({
-                                title: "Location Error",
-                                description: toastDescription,
-                                variant: "destructive",
-                                duration: 7000,
-                            });
-                            setLoading(false);
-                            if (!currentLocation) setCurrentLocation(defaultCenter); // Fallback if never got location
-                            if (!selectedLocation) setSelectedLocation(defaultCenter); // Fallback if never selected one
-                        },
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                    );
-                }
-            }}
+            onClick={getLocation} // Re-trigger the full getLocation logic
             disabled={loading}
             >
              <Icons.locate className="h-4 w-4 mr-1"/> {loading ? "Locating..." : "My Location"}
@@ -250,8 +273,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
           <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
           <p className="text-foreground">Initializing map...</p>
-          {!googleMapsApiKey && <p className="text-destructive text-sm mt-1">API key missing.</p>}
-          {apiLoadError && <p className="text-destructive text-sm mt-1">Failed to load Google Maps script.</p>}
+          {!googleMapsApiKey && <p className="text-destructive text-sm mt-1">Google Maps API key missing.</p>}
+          {apiLoadError && <p className="text-destructive text-sm mt-1">Failed to load Google Maps script: {apiLoadError.message}</p>}
         </div>
       )}
     </div>
@@ -259,4 +282,3 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 };
 
 export default GoogleMapComponent;
-
