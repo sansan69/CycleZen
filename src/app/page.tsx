@@ -315,7 +315,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVarsLog.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // setAuthLoading(false); // Keep authLoading true to disable auth buttons
+        // setAuthLoading(true); // Keep authLoading true to disable auth buttons
         return; 
     }
     
@@ -528,7 +528,7 @@ const HomePage = () => {
         </div>
       </div>
 
-      <header className="w-full max-w-4xl mx-auto py-4 px-4 sm:px-6 md:px-8 text-center sm:text-right">
+      <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8 text-center sm:text-right">
         <div className="flex flex-col sm:flex-row justify-end items-center gap-2 sm:gap-3">
           {authLoading ? (
             <Button variant="outline" disabled>
@@ -676,5 +676,6 @@ export default HomePage;
     
 
     
+
 
 
