@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
-import { Coordinate } from '@/services/open-route-service';
+import type { Coordinate } from '@/services/open-route-service';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +17,9 @@ const defaultCenter: Coordinate = {
   lat: 34.052235, // Los Angeles
   lng: -118.243683,
 };
+
+// Define libraries as a constant outside the component
+const GOOGLE_MAPS_LIBRARIES: ("places")[] = ['places'];
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
@@ -36,10 +39,10 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     zoomControl: true,
   };
 
-  const { isLoaded, loadError: apiLoadError } = useJsApiLoader({ // Renamed loadError to avoid conflict
+  const { isLoaded, loadError: apiLoadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: googleMapsApiKey,
-    libraries: ['places']
+    libraries: GOOGLE_MAPS_LIBRARIES, // Use the constant here
   });
 
   useEffect(() => {
@@ -68,14 +71,13 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         setSelectedLocation({ lat: latitude, lng: longitude }); 
       } catch (err: any) {
         console.error('Error getting location:', err.message);
-        setError(err.message); // Set component-level error state
+        setError(err.message);
         toast({
           title: "Location Error",
           description:
             err.message || "Could not retrieve your location. Please manually select a location or check permissions.",
           variant: "destructive",
         });
-         // Fallback to default center if geolocation fails
         setCurrentLocation(defaultCenter);
         setSelectedLocation(defaultCenter);
       } finally {
@@ -83,7 +85,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       }
     };
 
-    if (googleMapsApiKey && isLoaded) { // Ensure API is loaded before trying to get location
+    if (googleMapsApiKey && isLoaded) {
       getLocation();
     } else if (!googleMapsApiKey) {
       setLoading(false);
@@ -95,15 +97,13 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
         variant: "destructive",
       });
     }
-    // If isLoaded is false, we wait for the API to load. apiLoadError will be handled by render.
-  }, [isLoaded, googleMapsApiKey, toast]); // Added isLoaded to dependencies
+  }, [isLoaded, googleMapsApiKey, toast]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
-    // If selectedLocation is already set (e.g. from initial GPS or previous drag), pan to it.
     if (selectedLocation) {
         map.panTo(selectedLocation);
-    } else if (currentLocation) { // Fallback to currentLocation if selectedLocation is somehow null
+    } else if (currentLocation) {
         map.panTo(currentLocation);
     }
   }, [selectedLocation, currentLocation]);
@@ -125,7 +125,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     }
   }, [selectedLocation, onLocationSelected]);
 
-  if (apiLoadError) { // Handle Google Maps API script loading error
+  if (apiLoadError) {
     return (
       <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10">
         Error loading Google Maps: {apiLoadError.message}. Please check your API key and internet connection.
@@ -142,14 +142,12 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  // This error is for geolocation issues, after the map script has loaded.
-  if (error && !currentLocation) { // Show specific error if geolocation failed and we don't have a fallback map yet
+  if (error && !currentLocation) {
      return (
         <div className="text-destructive p-4 border border-destructive rounded-md bg-destructive/10 h-[400px] w-full flex flex-col items-center justify-center">
           <p>Error: {error}</p>
-          <p className="text-sm">Please ensure location services are enabled and permissions are granted.</p>
+          <p className="text-sm">Please ensure location services are enabled and permissions are granted for this site.</p>
           <p className="text-sm mt-2">You can still manually select a location by dragging the marker if the map loads.</p>
-           {/* Attempt to load map with default center if error occurred */}
            {isLoaded && (
              <div className="mt-4 text-foreground">Loading map with default location...</div>
            )}
@@ -160,15 +158,15 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
   return (
     <div className="relative h-[400px] w-full rounded-md overflow-hidden shadow-md">
-      {isLoaded && (currentLocation || selectedLocation) ? ( // Ensure either is available before rendering map
+      {isLoaded && (currentLocation || selectedLocation) ? (
         <>
           <GoogleMap
             mapContainerStyle={{ width: '100%', height: '100%' }}
-            center={selectedLocation || currentLocation || defaultCenter} // Prioritize selected, then current, then default
-            zoom={13} // Adjusted zoom for better initial view
+            center={selectedLocation || currentLocation || defaultCenter}
+            zoom={13}
             options={mapOptions}
             onLoad={onMapLoad}
-            onClick={(e) => { // Allow clicking on map to set marker
+            onClick={(e) => {
               if (e.latLng) {
                 setSelectedLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
               }
@@ -193,9 +191,9 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             variant="outline"
             size="sm"
             className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm hover:bg-background"
-            onClick={() => { // Re-fetch current location
+            onClick={() => {
                 if (isLoaded) {
-                     setError(null); // Clear previous errors
+                     setError(null);
                      setLoading(true);
                      navigator.geolocation.getCurrentPosition(
                         (position) => {
@@ -209,11 +207,10 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
                             setError(err.message);
                              toast({
                                 title: "Location Error",
-                                description: err.message || "Could not retrieve your location.",
+                                description: err.message || "Could not retrieve your location. Please check permissions.",
                                 variant: "destructive",
                             });
                             setLoading(false);
-                            // Fallback to default if re-fetch fails and current location becomes null
                             if (!currentLocation) setCurrentLocation(defaultCenter);
                             if (!selectedLocation) setSelectedLocation(defaultCenter);
                         },
