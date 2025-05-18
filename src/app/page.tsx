@@ -77,6 +77,13 @@ const formatTime = (seconds: number): string => {
   ].filter(Boolean).join(':');
 };
 
+const estimateCaloriesBurned = (distanceKm: number): string => {
+  // Very rough estimate: ~60 calories per km for moderate cycling.
+  // This is a placeholder and actual calorie expenditure varies greatly.
+  const calories = Math.round(distanceKm * 60);
+  return calories.toLocaleString();
+};
+
 
 const RouteDisplay = ({
   route,
@@ -102,6 +109,14 @@ const RouteDisplay = ({
   const [userLocationMarker, setUserLocationMarker] = useState<Coordinate | null>(null);
   const locationWatcherIdRef = useRef<number | null>(null);
   const [showStartRideDialog, setShowStartRideDialog] = useState(false);
+
+  // Ride Summary State
+  const [showRideSummaryDialog, setShowRideSummaryDialog] = useState(false);
+  const [rideSummaryData, setRideSummaryData] = useState<{
+    elapsedTime: number;
+    route: CyclingRoute;
+  } | null>(null);
+  const mapRefSummary = useRef<google.maps.Map | null>(null);
 
 
   const mapStyles = {
@@ -137,6 +152,18 @@ const RouteDisplay = ({
     }
   }, [route.coordinates]);
 
+  const onMapLoadSummary = useCallback((map: google.maps.Map, currentRoute: CyclingRoute) => {
+    mapRefSummary.current = map; // You might not need this ref if map interaction is minimal in summary
+    if (currentRoute.coordinates && currentRoute.coordinates.length > 0 && google.maps.LatLngBounds) {
+      const bounds = new google.maps.LatLngBounds();
+      currentRoute.coordinates.forEach(coord => {
+        bounds.extend(new google.maps.LatLng(coord.lat, coord.lng));
+      });
+      map.fitBounds(bounds);
+    }
+  }, []);
+
+
   useEffect(() => {
     if (mapRef.current && route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
       const bounds = new google.maps.LatLngBounds();
@@ -145,7 +172,7 @@ const RouteDisplay = ({
       });
       mapRef.current.fitBounds(bounds);
     }
-  }, [route.coordinates, center]); // Added center to dependencies
+  }, [route.coordinates, center]);
 
 
   const MAX_GOOGLE_MAPS_WAYPOINTS = 10;
@@ -225,7 +252,7 @@ const RouteDisplay = ({
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       
-      const { geometry, ...otherRouteProps } = route; // Exclude geometry
+      const { geometry, ...otherRouteProps } = route; 
       const routeDataToSave: any = { ...otherRouteProps };
 
       if (route.ascent !== undefined && isFinite(route.ascent)) {
@@ -234,7 +261,6 @@ const RouteDisplay = ({
         // Firestore handles omitting undefined fields, or you can explicitly delete routeDataToSave.ascent
       }
       
-      // Ensure 'steps' is included if available
       if (route.steps) {
         routeDataToSave.steps = route.steps;
       }
@@ -288,12 +314,12 @@ const RouteDisplay = ({
   const startRide = () => {
     setIsRideModeActive(true);
     setIsRidePaused(false);
-    rideStartTimeRef.current = Date.now() - elapsedTime * 1000; // Adjust start time if resuming
-    setElapsedTime(0); // Reset elapsed time for new ride or use existing for resume
+    rideStartTimeRef.current = Date.now() - elapsedTime * 1000; 
+    setElapsedTime(0); 
 
     if (rideTimerRef.current) clearInterval(rideTimerRef.current);
     rideTimerRef.current = setInterval(() => {
-      if (rideStartTimeRef.current && !isRidePaused) { // Check isRidePaused here
+      if (rideStartTimeRef.current && !isRidePaused) { 
         setElapsedTime(Math.floor((Date.now() - rideStartTimeRef.current) / 1000));
       }
     }, 1000);
@@ -320,9 +346,8 @@ const RouteDisplay = ({
   };
   
   useEffect(() => {
-    // Effect to manage the timer interval based on isRidePaused
     if (isRideModeActive && !isRidePaused && rideStartTimeRef.current) {
-        if (rideTimerRef.current) clearInterval(rideTimerRef.current); // Clear existing
+        if (rideTimerRef.current) clearInterval(rideTimerRef.current); 
         rideTimerRef.current = setInterval(() => {
             setElapsedTime(Math.floor((Date.now() - (rideStartTimeRef.current ?? Date.now())) / 1000));
         }, 1000);
@@ -330,22 +355,21 @@ const RouteDisplay = ({
         clearInterval(rideTimerRef.current);
     }
 
-    return () => { // Cleanup on component unmount or when ride mode ends
+    return () => { 
         if (rideTimerRef.current) clearInterval(rideTimerRef.current);
         if (locationWatcherIdRef.current) {
             navigator.geolocation.clearWatch(locationWatcherIdRef.current);
         }
     };
-  }, [isRideModeActive, isRidePaused]); // React to isRidePaused changes
+  }, [isRideModeActive, isRidePaused]); 
 
   const handlePauseResumeRide = () => {
     setIsRidePaused(prev => {
       const newPausedState = !prev;
-      if (newPausedState) { // Pausing
+      if (newPausedState) { 
         if (rideTimerRef.current) clearInterval(rideTimerRef.current);
-      } else { // Resuming
+      } else { 
         rideStartTimeRef.current = Date.now() - elapsedTime * 1000; 
-        // Timer restart is handled by the useEffect above
       }
       return newPausedState;
     });
@@ -358,8 +382,10 @@ const RouteDisplay = ({
     if (locationWatcherIdRef.current) navigator.geolocation.clearWatch(locationWatcherIdRef.current);
     locationWatcherIdRef.current = null;
     setUserLocationMarker(null);
-    toast({ title: "Ride Finished", description: `Total time: ${formatTime(elapsedTime)}`});
-    // elapsedTime is already set, no need to set it to 0 here unless you want to clear it for next ride immediately
+    
+    setRideSummaryData({ elapsedTime, route });
+    setShowRideSummaryDialog(true);
+    // The toast for "Ride Finished" can be removed as the dialog will show.
   };
 
 
@@ -411,7 +437,8 @@ const RouteDisplay = ({
               options={{
                 streetViewControl: false,
                 mapTypeControl: false,
-                fullscreenControl: true
+                fullscreenControl: true,
+                gestureHandling: 'cooperative'
               }}
               onLoad={onMapLoad}
             >
@@ -522,6 +549,77 @@ const RouteDisplay = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Ride Summary Dialog */}
+      <AlertDialog open={showRideSummaryDialog} onOpenChange={setShowRideSummaryDialog}>
+        <AlertDialogContent className="max-w-lg w-full">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ride Summary</AlertDialogTitle>
+            <AlertDialogDescription>
+              Here&apos;s a summary of your completed ride.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {rideSummaryData && (
+            <div className="space-y-4 my-4">
+              <div className="h-64 w-full rounded-md overflow-hidden border border-border">
+                {googleMapsApiKey ? (
+                  <GoogleMap
+                    mapContainerStyle={{ height: "100%", width: "100%" }}
+                    options={{
+                      streetViewControl: false,
+                      mapTypeControl: false,
+                      fullscreenControl: true,
+                      gestureHandling: 'cooperative'
+                    }}
+                    onLoad={(map) => onMapLoadSummary(map, rideSummaryData.route)}
+                  >
+                    {rideSummaryData.route.coordinates && rideSummaryData.route.coordinates.length > 0 && (
+                      <>
+                        <Polyline
+                          path={rideSummaryData.route.coordinates}
+                          options={{
+                            strokeColor: "hsl(var(--primary))",
+                            strokeWeight: 3,
+                            strokeOpacity: 0.8
+                          }}
+                        />
+                        <Marker position={rideSummaryData.route.coordinates[0]} />
+                      </>
+                    )}
+                  </GoogleMap>
+                ) : (
+                  <Skeleton className="h-full w-full bg-muted" />
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center pt-2">
+                <div>
+                  <p className="text-2xl font-bold text-primary">{formatTime(rideSummaryData.elapsedTime)}</p>
+                  <p className="text-sm text-muted-foreground">Duration</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
+                  <p className="text-sm text-muted-foreground">Distance</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-primary">
+                    {estimateCaloriesBurned(rideSummaryData.route.distance)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Est. Calories</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => {
+              setShowRideSummaryDialog(false);
+              setRideSummaryData(null); // Clear summary data
+              setElapsedTime(0); // Reset timer for next potential ride
+            }}>
+              Done
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
@@ -575,7 +673,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-         setAuthLoading(false); // Stop loading if config is critically missing
+         setAuthLoading(false); 
         return;
     }
 
@@ -604,6 +702,7 @@ const HomePage = () => {
       console.log("[handleGoogleSignIn] signInWithGoogle service call completed. User from service:", user);
 
       if (user) {
+        console.log(`[handleGoogleSignIn] User signed in: ${user.uid}. Checking Firestore for profile.`);
         if (db) {
           const userDocRef = doc(db, "users", user.uid);
           console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
@@ -623,10 +722,13 @@ const HomePage = () => {
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
-          // toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
+           // toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
+        // No user, so onAuthUserChanged will handle setting currentUser to null
+        // and authLoading to false if it hasn't already. If it was a popup close,
+        // authLoading might need explicit setting here.
         setAuthLoading(false); 
       }
     } catch (error: any) {
@@ -670,17 +772,16 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signOutUser();
-      // onAuthUserChanged will set currentUser to null and authLoading to false
       // toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); // Explicitly set loading to false on error
+      setAuthLoading(false); 
     }
   };
 
   const isRadiusValid = (r: string): boolean => {
-    if (r === "") return false; // Empty string is invalid
+    if (r === "") return false; 
     const num = parseInt(r, 10);
     return !isNaN(num) && num >= 5 && num <= 100;
   };
@@ -695,7 +796,7 @@ const HomePage = () => {
       return;
     }
 
-    if (!isRadiusValid(radius)) { // Use the validation function
+    if (!isRadiusValid(radius)) { 
        toast({
         title: "Invalid Target Distance",
         description: "Please enter a target loop distance between 5 and 100 km.",
@@ -703,7 +804,7 @@ const HomePage = () => {
       });
       return;
     }
-    const numericRadius = parseInt(radius, 10); // Safe to parse now
+    const numericRadius = parseInt(radius, 10); 
 
     setLoadingRoutes(true);
     setRoutes(null);
@@ -766,7 +867,7 @@ const HomePage = () => {
     previousSelectedLocationRef.current = selectedLocation;
   }, [selectedLocation, toast]);
 
-  const currentRadiusValue = parseInt(radius, 10); // radius is string
+  const currentRadiusValue = parseInt(radius, 10); 
   const displayRadius = !isNaN(currentRadiusValue) && currentRadiusValue >=5 && currentRadiusValue <=100 ? currentRadiusValue : (radius === "" ? "" : 5);
   const numericRadiusForMap = isRadiusValid(radius) ? parseInt(radius, 10) : null;
 
@@ -931,18 +1032,18 @@ const HomePage = () => {
                   value={radius}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     const value = e.target.value;
-                    if (value === "" || /^\d*$/.test(value)) { // Allow empty or only digits
+                    if (value === "" || /^\d*$/.test(value)) { 
                       setRadius(value);
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") return; // Allow to be empty on blur
+                    if (radius === "") return; 
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); // Reset to empty if invalid
+                      setRadius(""); 
                       toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
                     } else {
-                      setRadius(String(num)); // Normalize (e.g., "07" to "7")
+                      setRadius(String(num)); 
                     }
                   }}
                   placeholder="5 - 100"
@@ -1027,3 +1128,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
