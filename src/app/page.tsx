@@ -315,7 +315,8 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // Keep authLoading true to prevent login attempts
+        // Keep authLoading true to prevent login attempts if critical Firebase config is missing.
+        // setAuthLoading(false); // Explicitly not setting to false here to keep buttons disabled.
         return; 
     }
     
@@ -360,13 +361,12 @@ const HomePage = () => {
         }
         
         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
-        Current Origin: ${currentOrigin}. 
-        Configured Firebase Auth Domain in your .env.local: ${configuredAuthDomain}.
-        \nTroubleshooting:
-        \n1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' (or the relevant domain from your app's URL) is listed.
-        \n2. Verify that NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file ('${configuredAuthDomain}') exactly matches the Auth Domain of your Firebase project.
-        \n3. Ensure all NEXT_PUBLIC_FIREBASE_* variables in .env.local are correct for this project.
-        \n4. Restart your Next.js development server (Ctrl+C, then npm run dev) after any .env.local changes.`;
+        Current Origin: ${currentOrigin}. Configured Firebase Auth Domain in .env.local: ${configuredAuthDomain}.
+        Troubleshooting:
+        1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
+        2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in .env.local ('${configuredAuthDomain}') matches your Firebase project's Auth Domain.
+        3. Verify all NEXT_PUBLIC_FIREBASE_* vars are correct.
+        4. Restart your Next.js dev server after .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
     } finally {
@@ -511,7 +511,7 @@ const HomePage = () => {
         </AlertDialogContent>
       </AlertDialog>
       
-      <div className="relative w-full h-64 sm:h-80 md:h-96 group shadow-lg">
+      <div className="relative w-full h-52 sm:h-64 md:h-80 group shadow-lg">
         <Image
           src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy"
           alt="Cyclist riding on a scenic route at sunset"
@@ -521,10 +521,10 @@ const HomePage = () => {
           data-ai-hint="cycle background"
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/80 p-4">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white text-center leading-tight">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white text-center leading-tight">
             CycleZen
           </h1>
-          <p className="text-lg sm:text-xl text-gray-200 mt-2 text-center max-w-xl">
+          <p className="text-md sm:text-lg text-gray-200 mt-2 text-center max-w-xl">
             Your companion for discovering and sharing amazing cycling routes.
           </p>
         </div>
@@ -686,6 +686,7 @@ export default HomePage;
     
 
     
+
 
 
 
