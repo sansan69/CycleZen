@@ -57,11 +57,13 @@ const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[
 const RouteDisplay = ({
   route,
   user,
-  selectedLocationForRouteName
+  selectedLocationForRouteName,
+  routeIndex
 }: {
   route: CyclingRoute;
   user: User | null;
   selectedLocationForRouteName: Coordinate | null; 
+  routeIndex: number;
 }) => {
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
@@ -187,12 +189,8 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      const routeDataToSave = {
-        distance: route.distance,
-        estimatedTime: route.estimatedTime,
-        ascent: route.ascent,
-        coordinates: route.coordinates,
-      };
+      // Exclude route.geometry when saving
+      const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -248,7 +246,7 @@ const RouteDisplay = ({
   return (
     <Card className="bg-card shadow-lg rounded-lg">
       <CardHeader>
-        <CardTitle className="text-primary">Route Option</CardTitle>
+        <CardTitle className="text-primary">Route Option {routeIndex + 1}</CardTitle>
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-2 text-sm">
           <div className="flex items-center">
             <Icons.route className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -396,6 +394,8 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
+        // Keep authLoading true if critical vars are missing to prevent login attempts
+        setAuthLoading(true);
         return; 
     }
     
@@ -816,7 +816,7 @@ const HomePage = () => {
               <Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Location Select
             </Button>
             {routes.map((route, index) => (
-              <RouteDisplay key={index} route={route} user={currentUser} selectedLocationForRouteName={selectedLocation}/>
+              <RouteDisplay key={index} route={route} user={currentUser} selectedLocationForRouteName={selectedLocation} routeIndex={index}/>
             ))}
           </div>
         )}
