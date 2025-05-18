@@ -49,12 +49,14 @@ export interface CyclingRoute {
  * @param location The starting location for the routes.
  * @param radius The radius in kilometers which influences the target length of the routes.
  * @param numberOfRoutes The number of routes to generate. Defaults to 3.
+ * @param avoidFeatures An optional array of features to avoid (e.g., ["highways", "tollways"]).
  * @returns A promise that resolves to an array of CyclingRoute objects.
  */
 export async function getCyclingRoutes(
   location: Coordinate,
   radius: number, // This radius is used for round_trip.length
-  numberOfRoutes: number = 3
+  numberOfRoutes: number = 3,
+  avoidFeatures?: string[]
 ): Promise<CyclingRoute[]> {
   const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
 
@@ -63,7 +65,6 @@ export async function getCyclingRoutes(
 
   if (!apiKey) {
     console.error("OpenRouteService API key is missing. Please configure it.");
-    // Optionally throw an error or return an empty array with a user-facing message source
     throw new Error("OpenRouteService API key is not configured.");
   }
 
@@ -71,7 +72,7 @@ export async function getCyclingRoutes(
     let route: CyclingRoute | null = null;
     for (let tryCount = 0; tryCount < maxTriesPerRoute; tryCount++) {
       try {
-        route = await fetchRoute(apiKey, location, radius * 1000); // radius to meters for length
+        route = await fetchRoute(apiKey, location, radius * 1000, avoidFeatures); // radius to meters for length
         if (route) {
           cyclingRoutes.push(route);
           break; // Got a route, move to the next one
@@ -87,7 +88,12 @@ export async function getCyclingRoutes(
   return cyclingRoutes;
 }
 
-async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLengthMeters: number): Promise<CyclingRoute> {
+async function fetchRoute(
+  apiKey:string, 
+  startLocation: Coordinate, 
+  targetLengthMeters: number,
+  avoidFeatures?: string[]
+): Promise<CyclingRoute> {
   const profile = "cycling-regular";
   const url = `https://api.openrouteservice.org/v2/directions/${profile}/geojson`;
 
@@ -95,16 +101,21 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
     [startLocation.lng, startLocation.lat]
   ];
 
+  const options: any = {
+    "round_trip": {
+      "length": targetLengthMeters, 
+      "points": 3, 
+      "seed": Math.floor(Math.random() * 10000) 
+    }
+  };
+
+  if (avoidFeatures && avoidFeatures.length > 0) {
+    options["avoid_features"] = avoidFeatures;
+  }
+
   const body = {
     "coordinates": coordinatesPayload,
-    "options": {
-      "round_trip": {
-        "length": targetLengthMeters, 
-        "points": 3, 
-        "seed": Math.floor(Math.random() * 10000) 
-      },
-      "avoid_features": ["fords", "ferries"],
-    },
+    "options": options,
     "preference": "recommended",
     "geometry_simplify": "true", 
   };
@@ -173,3 +184,4 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
     geometry: feature.geometry 
   };
 }
+

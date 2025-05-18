@@ -10,6 +10,7 @@ import {
   addDoc,
   doc,
   getDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import Link from "next/link";
 import Image from "next/image";
@@ -45,6 +46,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
@@ -200,7 +203,7 @@ const RouteDisplay = ({
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
-        timestamp: new Date(),
+        timestamp: serverTimestamp(),
         routeName: `Route Option ${routeIndex + 1} near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
       });
@@ -351,6 +354,11 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const router = useRouter();
 
+  // Route Preferences State
+  const [avoidHighways, setAvoidHighways] = useState<boolean>(false);
+  const [avoidTollways, setAvoidTollways] = useState<boolean>(false);
+  const [avoidFerries, setAvoidFerries] = useState<boolean>(false);
+
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: googleMapsApiKey,
@@ -383,7 +391,6 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // setAuthLoading(false); // Keep authLoading true to disable auth UI
         return;
     }
 
@@ -436,6 +443,14 @@ const HomePage = () => {
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+      let hostnameToAdd = 'localhost';
+       try {
+          hostnameToAdd = new URL(currentOrigin).hostname;
+        } catch(e) {
+          console.warn("Could not parse hostname from currentOrigin", currentOrigin);
+          hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
+        }
 
       if (error.code === 'auth/popup-closed-by-user') {
         toast({
@@ -445,19 +460,12 @@ const HomePage = () => {
           duration: 5000
         });
       } else if (error.code === 'auth/unauthorized-domain') {
-        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-        let hostnameToAdd = 'localhost';
-        try {
-          hostnameToAdd = new URL(currentOrigin).hostname;
-        } catch(e) {
-          console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-          hostnameToAdd = currentOrigin;
-        }
         const unauthorizedDomainDescription = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In.
-        Current Origin: ${currentOrigin}. Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
+        Current Origin: ${currentOrigin}.
+        Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Project ID: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'Not Set'}.
         Troubleshooting:
-        1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' (and 'localhost' if developing locally) is listed.
+        1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
         2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file matches your Firebase project's Auth Domain.
         3. Verify all NEXT_PUBLIC_FIREBASE_* vars in .env.local are correct for the project.
         4. Restart your Next.js dev server after .env.local changes.`;
@@ -465,7 +473,8 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-      setAuthLoading(false); // Ensure loading is false on error
+    } finally {
+      setAuthLoading(false); 
     }
   };
 
@@ -478,7 +487,8 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false);
+    } finally {
+       setAuthLoading(false);
     }
   };
 
@@ -492,7 +502,7 @@ const HomePage = () => {
     if (!selectedLocation) {
       toast({
         title: "Location Required",
-        description: "Please select a location before generating routes.",
+        description: "Please select a starting point before generating routes.",
         variant: "destructive",
       });
       return;
@@ -501,8 +511,8 @@ const HomePage = () => {
     const numericRadius = parseInt(radius, 10);
     if (!isRadiusValid(radius)) {
        toast({
-        title: "Invalid Radius",
-        description: "Please enter a radius between 5 and 100 km.",
+        title: "Invalid Target Distance",
+        description: "Please enter a target loop distance between 5 and 100 km.",
         variant: "destructive",
       });
       return;
@@ -521,7 +531,13 @@ const HomePage = () => {
         setLoadingRoutes(false);
         return;
       }
-      const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3);
+
+      const selectedAvoidFeatures: string[] = [];
+      if (avoidHighways) selectedAvoidFeatures.push("highways");
+      if (avoidTollways) selectedAvoidFeatures.push("tollways");
+      if (avoidFerries) selectedAvoidFeatures.push("ferries");
+
+      const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3, selectedAvoidFeatures);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false);
@@ -535,7 +551,7 @@ const HomePage = () => {
       } else {
         toast({
           title: "No Routes Found",
-          description: "Could not find any cycling routes for the selected criteria. Try adjusting the radius or location.",
+          description: "Could not find any cycling routes for the selected criteria. Try adjusting the distance, location or preferences.",
           variant: "default",
         });
       }
@@ -549,7 +565,7 @@ const HomePage = () => {
     } finally {
       setLoadingRoutes(false);
     }
-  }, [selectedLocation, radius, toast]);
+  }, [selectedLocation, radius, toast, avoidHighways, avoidTollways, avoidFerries]);
 
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
@@ -561,7 +577,7 @@ const HomePage = () => {
           previousSelectedLocationRef.current.lng !== selectedLocation.lng) {
         toast({
           title: 'Location Updated',
-          description: `New location selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
+          description: `New starting point selected: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`,
         });
       }
     }
@@ -684,18 +700,18 @@ const HomePage = () => {
           <CardHeader>
             <CardTitle className="text-2xl text-primary">Route Generation</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Select a starting point and radius to find your next ride.
+              Select a starting point, target distance, and preferences to find your next ride.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6">
             {isLoaded && (
               <div className="grid gap-2">
-                 <label
+                 <Label
                     htmlFor="location-search"
                     className="text-sm font-medium leading-none text-foreground"
                   >
                     Search for starting location
-                  </label>
+                  </Label>
                 <Autocomplete
                   onLoad={onLoadAutocomplete}
                   onPlaceChanged={onPlaceChanged}
@@ -719,12 +735,12 @@ const HomePage = () => {
             )}
 
             <div className="grid gap-2">
-              <label
+              <Label
                 htmlFor="radius"
                 className="text-sm font-medium leading-none text-foreground"
               >
-                Radius for route length (km)
-              </label>
+                Target Loop Distance (approx. km)
+              </Label>
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Input
                   type="text"
@@ -740,9 +756,9 @@ const HomePage = () => {
                     if (radius === "") return;
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius("");
+                      setRadius(""); // Reset to empty if out of range or invalid
                     } else {
-                      setRadius(String(num));
+                      setRadius(String(num)); // Normalize valid number
                     }
                   }}
                   placeholder="5 - 100"
@@ -755,22 +771,44 @@ const HomePage = () => {
                   step={1}
                   onValueChange={(newValue) => setRadius(String(newValue[0]))}
                   className="w-full sm:flex-1"
-                  aria-label="Radius slider"
+                  aria-label="Target loop distance slider"
                 />
                 <span className="text-sm font-medium text-foreground w-full sm:w-12 text-center sm:text-right mt-2 sm:mt-0">
                   {displayRadius}{radius !== "" && isRadiusValid(radius) ? " km" : ""}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Enter a radius between 5 and 100 km.
+                Enter a target distance between 5 and 100 km for your loop ride.
               </p>
             </div>
+            
+            <div className="grid gap-4">
+              <h3 className="text-md font-medium text-foreground">Route Preferences</h3>
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="avoidHighways" checked={avoidHighways} onCheckedChange={(checked) => setAvoidHighways(checked as boolean)} />
+                  <Label htmlFor="avoidHighways" className="font-normal text-sm text-foreground">Avoid Highways</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="avoidTollways" checked={avoidTollways} onCheckedChange={(checked) => setAvoidTollways(checked as boolean)} />
+                  <Label htmlFor="avoidTollways" className="font-normal text-sm text-foreground">Avoid Tollways</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="avoidFerries" checked={avoidFerries} onCheckedChange={(checked) => setAvoidFerries(checked as boolean)} />
+                  <Label htmlFor="avoidFerries" className="font-normal text-sm text-foreground">Avoid Ferries</Label>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Note: Elevation targets and specific terrain type preferences are not available for generation. 
+                Elevation gain will be shown in generated route details.
+              </p>
+            </div>
+
 
             {showMapInput && (
              <div className="rounded-lg overflow-hidden shadow-md border border-border">
                 <GoogleMapComponent
                   onLocationSelected={handleLocationSelected}
-                  googleMapsApiKey={googleMapsApiKey}
                   searchRadiusKm={numericRadiusForMap}
                   isLoaded={isLoaded}
                   loadError={loadError}
