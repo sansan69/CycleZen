@@ -1,5 +1,5 @@
 
-import {ArrowLeft, ArrowRight, Check, ChevronsUpDown, Circle, Copy, Edit, ExternalLink, File, HelpCircle, Home, List, Loader2, Locate, Mail, MessageSquare, Moon, Plus, PlusCircle, Search, Server, Settings, Share2, Shield, Sun, Trash, User, Workflow, Bike, Clock, Mountain, Route, Bookmark, Download, UserCog, Play, Pause, Square, MapPin, X, ImageDown, LayoutDashboard, Activity } from 'lucide-react';
+import {ArrowLeft, ArrowRight, Check, ChevronsUpDown, Circle, Copy, Edit, ExternalLink, File, HelpCircle, Home, List, Loader2, Locate, Mail, MessageSquare, Moon, Plus, PlusCircle, Search, Server, Settings, Share2, Shield, Sun, Trash, User, Workflow, Bike, Clock, Mountain, Route, Bookmark, Download, UserCog, Play, Pause, Square, MapPin, X, ImageDown, LayoutDashboard, Activity, Menu } from 'lucide-react';
 
 const Icons = {
   arrowLeft: ArrowLeft,
@@ -45,6 +45,7 @@ const Icons = {
   shareAsImage: ImageDown,
   dashboard: LayoutDashboard, 
   activity: Activity,
+  menu: Menu,
 };
 
 export {Icons};

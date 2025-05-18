@@ -41,8 +41,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Card,
   CardContent,
@@ -82,8 +89,6 @@ const estimateCaloriesBurned = (distanceKm: number | undefined): string => {
   if (typeof distanceKm !== 'number' || !isFinite(distanceKm) || distanceKm <= 0) {
     return 'N/A';
   }
-  // Very rough estimate: ~60 calories per km for moderate cycling.
-  // This is a placeholder and actual calorie expenditure varies greatly.
   const calories = Math.round(distanceKm * 60);
   return calories.toLocaleString();
 };
@@ -101,7 +106,6 @@ const RouteDisplay = ({
   routeIndex: number;
 }) => {
   const { toast } = useToast();
-  const [center, setCenter] = useState<Coordinate | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   // Ride Mode State
@@ -125,30 +129,14 @@ const RouteDisplay = ({
     estimatedCalories: string;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
+  const rideSummaryContentRef = useRef<HTMLDivElement>(null);
 
 
   const mapStyles = {
     height: "300px",
     width: "100%",
   };
-
-  useEffect(() => {
-    if (route.coordinates && route.coordinates.length > 0) {
-      const latitudes = route.coordinates.map(p => p.lat);
-      const longitudes = route.coordinates.map(p => p.lng);
-      const minLat = Math.min(...latitudes);
-      const maxLat = Math.max(...latitudes);
-      const minLng = Math.min(...longitudes);
-      const maxLng = Math.max(...longitudes);
-      setCenter({
-        lat: (minLat + maxLat) / 2,
-        lng: (minLng + maxLng) / 2,
-      });
-    } else {
-      setCenter({ lat: 0, lng: 0 });
-    }
-  }, [route]);
-
+  
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     if (route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
@@ -170,17 +158,6 @@ const RouteDisplay = ({
       map.fitBounds(bounds);
     }
   }, []);
-
-
-  useEffect(() => {
-    if (mapRef.current && route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
-      const bounds = new google.maps.LatLngBounds();
-      route.coordinates.forEach(coord => {
-        bounds.extend(new google.maps.LatLng(coord.lat, coord.lng));
-      });
-      mapRef.current.fitBounds(bounds);
-    }
-  }, [route.coordinates, center]);
 
 
   const MAX_GOOGLE_MAPS_WAYPOINTS = 10;
@@ -264,16 +241,13 @@ const RouteDisplay = ({
         distance: route.distance,
         estimatedTime: route.estimatedTime,
         coordinates: route.coordinates, 
+        steps: route.steps,
       };
       
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       }
       
-      if (route.steps) {
-        routeDataToSave.steps = route.steps;
-      }
-
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -441,7 +415,7 @@ const RouteDisplay = ({
         estimatedCalories: rideSummaryData.estimatedCalories,
         routeCoordinates: rideSummaryData.route.coordinates,
         ascent: rideSummaryData.route.ascent,
-        // steps: rideSummaryData.route.steps, // Steps can be quite large, consider if truly needed here
+        steps: rideSummaryData.route.steps, 
       };
       
       await addDoc(completedRidesCollection, rideDataToSave);
@@ -452,13 +426,7 @@ const RouteDisplay = ({
     }
   };
 
-
-  if (!center && !(route.coordinates && route.coordinates.length > 0)) {
-    return <Skeleton className="h-[400px] w-full" />;
-  }
-
-  const mapInitialCenter = center || (route.coordinates && route.coordinates.length > 0 ? route.coordinates[0] : { lat: 0, lng: 0 });
-
+  const mapInitialCenter = (route.coordinates && route.coordinates.length > 0 ? route.coordinates[0] : { lat: 0, lng: 0 });
 
   return (
     <Card className="bg-card shadow-lg rounded-lg">
@@ -623,7 +591,7 @@ const RouteDisplay = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {rideSummaryData && (
-            <div className="space-y-4 my-4 p-4 bg-background rounded">
+            <div ref={rideSummaryContentRef} className="space-y-4 my-4 p-4 bg-background rounded border border-border">
               <div className="h-64 w-full rounded-md overflow-hidden border border-border">
                 {googleMapsApiKey ? (
                   <GoogleMap
@@ -679,7 +647,7 @@ const RouteDisplay = ({
                   <p className="text-sm text-muted-foreground">Est. Calories</p>
                 </div>
 
-                {(rideSummaryData.actualDistanceCoveredKm === undefined || rideSummaryData.actualDistanceCoveredKm !== rideSummaryData.route.distance) && (
+                {(rideSummaryData.actualDistanceCoveredKm === undefined || rideSummaryData.actualDistanceCoveredKm.toFixed(1) !== rideSummaryData.route.distance.toFixed(1)) && (
                      <div className="mt-1">
                         <p className="text-base font-semibold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
                         <p className="text-xs text-muted-foreground">Total Planned Route Distance</p>
@@ -688,7 +656,7 @@ const RouteDisplay = ({
               </div>
             </div>
           )}
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -699,6 +667,7 @@ const RouteDisplay = ({
                 setRideStartActualLocation(null); 
               }}
               disabled={!user || !rideSummaryData}
+              className="w-full sm:w-auto"
             >
               Save Ride & Done
             </Button>
@@ -707,7 +676,9 @@ const RouteDisplay = ({
               setRideSummaryData(null); 
               setElapsedTime(0); 
               setRideStartActualLocation(null); 
-            }}>
+            }}
+            className="w-full sm:w-auto"
+            >
               Done (Don't Save)
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -732,25 +703,6 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const router = useRouter();
 
-  const [showPWAInstallInstructions, setShowPWAInstallInstructions] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hasSeenPrompt = localStorage.getItem('hasSeenPWAInstallPrompt');
-      if (!hasSeenPrompt) {
-        // setShowPWAInstallInstructions(true); // Replaced by PWAInstallPrompt component
-      }
-    }
-  }, []);
-
-  const handleDismissInstallPrompt = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hasSeenPWAInstallPrompt', 'true');
-    }
-    setShowPWAInstallInstructions(false);
-  };
-
-
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: googleMapsApiKey,
@@ -761,37 +713,32 @@ const HomePage = () => {
     const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     const envProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const envAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
-    const envStorageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-    const envMessagingSenderId = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
-    const envAppId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
+    if (!envApiKey || !envProjectId || !envAuthDomain) {
+        const missingVars: string[] = [];
+        if (!envApiKey) missingVars.push("API Key");
+        if (!envProjectId) missingVars.push("Project ID");
+        if (!envAuthDomain) missingVars.push("Auth Domain");
+
+        const message = `CRITICAL: Firebase config missing from client environment: ${missingVars.join(", ")}. Authentication will be unavailable. Check .env.local and restart the server.`;
+        toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
+        console.error(message);
+        setAuthLoading(false); // Allow UI to render, albeit with auth disabled
+        return;
+    }
     console.log("--- Firebase Config from Client Environment ---");
     console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:", envAuthDomain ? "Present" : "MISSING or Empty");
-    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", envStorageBucket ? "Present" : "Not Set (Optional)");
-    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "Not Set (Optional)");
-    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "Not Set (Optional)");
+    console.log("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:", process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? "Present" : "Not Set (Optional)");
+    console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? "Present" : "Not Set (Optional)");
+    console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? "Present" : "Not Set (Optional)");
     console.log("----------------------------------------------");
-
-    let missingVars: string[] = [];
-    if (!envApiKey) missingVars.push("API Key");
-    if (!envProjectId) missingVars.push("Project ID");
-    if (!envAuthDomain) missingVars.push("Auth Domain");
-
-    if (missingVars.length > 0) {
-        const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
-        toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
-        console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(false); 
-        return;
-    }
 
     console.log('page.tsx useEffect: Project ID from env is:', envProjectId);
     console.log('page.tsx useEffect: Auth Domain from env is:', envAuthDomain);
 
     const unsubscribe = onAuthUserChanged((user) => {
-      console.log("page.tsx onAuthUserChanged: User state changed, new user:", user);
       setCurrentUser(user);
       setAuthLoading(false); 
       if (user) {
@@ -806,41 +753,33 @@ const HomePage = () => {
 
 
  const handleGoogleSignIn = async () => {
-    console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
     setAuthLoading(true);
     try {
       const user = await signInWithGoogle();
-      console.log("[handleGoogleSignIn] signInWithGoogle service call completed. User from service:", user);
-
       if (user) {
         console.log(`[handleGoogleSignIn] User signed in: ${user.uid}. Checking Firestore for profile.`);
-        
         if (db) {
           const userDocRef = doc(db, "users", user.uid);
           console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
-          try {
-            const docSnap = await getDoc(userDocRef);
-            const userData = docSnap.data();
-            console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
-              
-            if (!docSnap.exists() || !userData?.username) {
-              console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
-              toast({ title: "Welcome!", description: "Please complete your profile." });
-              router.push('/profile');
-            } else {
-              console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-               toast({ title: "Signed In", description: `Welcome back, ${userData.username || user.displayName || user.email}!`});
-            }
-          } catch (firestoreError) {
-            console.error("[handleGoogleSignIn] Firestore error checking profile:", firestoreError);
-            toast({ title: "Signed In", description: `Welcome, ${user.displayName || user.email}! (Profile check failed)`, variant: "default" });
+          const docSnap = await getDoc(userDocRef);
+          const userData = docSnap.data();
+          console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
+            
+          if (!docSnap.exists() || !userData?.username) {
+            console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
+            toast({ title: "Welcome!", description: "Please complete your profile." });
+            router.push('/profile');
+          } else {
+            console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
+            toast({ title: "Signed In", description: `Welcome back, ${userData.username || user.displayName || user.email}!`});
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
-           toast({ title: "Signed In", description: `Welcome, ${user.displayName || user.email}!`});
+          toast({ title: "Signed In", description: `Welcome, ${user.displayName || user.email}!`});
         }
       } else {
-        console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
+         // signInWithGoogle might return null if popup closed by user, error handled in service
+         console.warn("[handleGoogleSignIn] signInWithGoogle service returned null. This might indicate the popup was closed by the user or an issue in the service layer.");
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -875,12 +814,11 @@ const HomePage = () => {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
     } finally {
-      // setAuthLoading(false); // onAuthUserChanged handles this generally
+      // onAuthUserChanged will handle setting authLoading to false after user state is confirmed
     }
   };
 
   const handleSignOut = async () => {
-    console.log("[handleSignOut] Attempting Sign-Out via service.");
     setAuthLoading(true);
     try {
       await signOutUser();
@@ -889,6 +827,7 @@ const HomePage = () => {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
     } 
+    // onAuthUserChanged will set authLoading to false
   };
 
   const isRadiusValid = (r: string): boolean => {
@@ -963,6 +902,7 @@ const HomePage = () => {
 
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
+    // Toast is now handled by useEffect below
   }, []);
 
   useEffect(() => {
@@ -1031,39 +971,6 @@ const HomePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
-      <AlertDialog open={showPWAInstallInstructions} onOpenChange={setShowPWAInstallInstructions}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-muted-foreground">
-              Get the best experience by adding CycleZen to your home screen.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="text-sm text-muted-foreground space-y-4 pt-2">
-            <div>
-              <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
-              <ol className="list-decimal list-inside pl-4">
-                <li>Open CycleZen in Chrome.</li>
-                <li>Tap the three dots (⋮) in the top-right.</li>
-                <li>Tap &quot;Install app&quot; or &quot;Add to Home screen&quot;.</li>
-              </ol>
-            </div>
-            <div>
-              <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
-              <ol className="list-decimal list-inside pl-4">
-                <li>Open CycleZen in Safari.</li>
-                <li>Tap the Share icon (square with arrow up).</li>
-                <li>Scroll down and tap &quot;Add to Home Screen&quot;.</li>
-              </ol>
-            </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleDismissInstallPrompt} variant="accent">Okay, Got It!</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-
       <div className="relative w-full h-52 sm:h-64 md:h-80 group shadow-lg">
         <Image
           src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy"
@@ -1091,32 +998,43 @@ const HomePage = () => {
             </Button>
           </div>
         ) : currentUser ? (
-           <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] items-center gap-3 w-full">
-            <div className="w-full sm:w-auto order-1 sm:order-1 sm:justify-self-start flex gap-2">
-              <Link href="/saved-routes" passHref>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
-                </Button>
-              </Link>
-              <Link href="/dashboard" passHref>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  <Icons.dashboard className="mr-2 h-4 w-4" /> Dashboard
-                </Button>
-              </Link>
-            </div>
-            <div className="text-sm text-foreground text-center order-2 sm:order-2 py-1 sm:py-0">
-              <Link href="/profile" passHref>
-                <Button variant="link" className="text-sm text-foreground hover:text-primary p-0 h-auto hover:underline">
-                 Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
-                </Button>
-              </Link>
-            </div>
-            <div className="w-full sm:w-auto order-3 sm:order-3 sm:justify-self-end">
-              <Button variant="outline" onClick={handleSignOut} className="w-full">
-                <Icons.user className="mr-2 h-4 w-4" /> Logout
-              </Button>
-            </div>
-          </div>
+           <div className="flex justify-end w-full">
+             <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <Icons.menu className="h-5 w-5" />
+                    <span className="sr-only">Open user menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Hi, {capitalizeName(currentUser.displayName || currentUser.email)}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile" className="cursor-pointer">
+                      <Icons.userCog className="mr-2 h-4 w-4" />
+                      <span>View Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/saved-routes" className="cursor-pointer">
+                      <Icons.list className="mr-2 h-4 w-4" />
+                      <span>My Saved Routes</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="cursor-pointer">
+                      <Icons.dashboard className="mr-2 h-4 w-4" />
+                      <span>Dashboard</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
+                    <Icons.user className="mr-2 h-4 w-4" /> {/* Consider a more logout-specific icon like LogOut */}
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+           </div>
         ) : (
           <div className="flex justify-center items-center py-2">
             <Button variant="outline" onClick={handleGoogleSignIn} className="w-full sm:w-auto">
@@ -1189,7 +1107,7 @@ const HomePage = () => {
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
                       setRadius(""); 
-                      toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
+                      // toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
                     } else {
                       setRadius(String(num)); 
                     }
@@ -1215,7 +1133,6 @@ const HomePage = () => {
               </p>
             </div>
             
-
             {showMapInput && (
              <div className="rounded-lg overflow-hidden shadow-md border border-border">
                 <GoogleMapComponent
@@ -1278,4 +1195,5 @@ const HomePage = () => {
 export default HomePage;
 
       
+
 
