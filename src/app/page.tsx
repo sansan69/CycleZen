@@ -200,19 +200,14 @@ const RouteDisplay = ({
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       
-      // Exclude geometry when saving
       const { geometry, ...otherRouteProps } = route;
       const routeDataToSave: any = { ...otherRouteProps };
 
-      // Ensure ascent is a finite number or not included
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       } else {
-        // Firestore doesn't support undefined. If ascent is undefined or non-finite, don't include it.
-        // Or, you could save it as null or a specific placeholder if you prefer.
-        // For now, we'll just omit it if it's not a valid number.
+        // Firestore does not store undefined. Ascent will be omitted if not a valid number.
       }
-
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -401,7 +396,6 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // Do not set authLoading to false here; keep UI in loading state for auth
         return;
     }
 
@@ -452,12 +446,8 @@ const HomePage = () => {
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
         }
       } else {
-        // This case means signInWithGoogle resolved to null, which can happen if the user closes the popup
-        // or if there's an issue not caught as an exception by the service.
-        // The service itself logs `auth/popup-closed-by-user` before throwing or returning null.
-        // So, we may not need to handle popup-closed-by-user specifically here if the service does.
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
-        setAuthLoading(false); // Ensure auth loading is false if no user and no explicit error thrown here
+        setAuthLoading(false); 
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -505,8 +495,7 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-    } 
-    // setAuthLoading(false) will be handled by onAuthUserChanged
+    }
   };
 
   const isRadiusValid = (r: string): boolean => {
@@ -794,11 +783,6 @@ const HomePage = () => {
               </p>
             </div>
             
-            <p className="text-xs text-muted-foreground">
-              Note: Elevation targets and specific terrain type preferences are not available for generation. 
-              Elevation gain will be shown in generated route details.
-            </p>
-
 
             {showMapInput && (
              <div className="rounded-lg overflow-hidden shadow-md border border-border">
@@ -860,3 +844,6 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
+
+    
