@@ -198,7 +198,7 @@ const RouteDisplay = ({
       const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
-        routeData: routeDataToSave, // Save the route object without geometry
+        routeData: routeDataToSave, 
         timestamp: new Date(),
         routeName: `Route Option ${routeIndex + 1} near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
@@ -211,7 +211,7 @@ const RouteDisplay = ({
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). Please try removing the 'geometry' field if present.";
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
       } else if (error.message) {
         description = error.message;
       }
@@ -388,10 +388,9 @@ const HomePage = () => {
     console.log('page.tsx useEffect: Project ID from env is:', envProjectId);
     console.log('page.tsx useEffect: Auth Domain from env is:', envAuthDomain);
 
-
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false); 
+      setAuthLoading(false); // Auth state determined, set loading to false
       if (user) {
         console.log("page.tsx onAuthUserChanged: User signed in:", user.uid, user);
       } else {
@@ -400,29 +399,50 @@ const HomePage = () => {
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [toast, router]); // router added to dependency array
 
 
   const handleGoogleSignIn = async () => {
     console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
-    setAuthLoading(true);
+    setAuthLoading(true); // Indicate auth process starting
     try {
-      const user = await signInWithGoogle();
-      if (user && db) {
-        const userDocRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(userDocRef);
+      const user = await signInWithGoogle(); // This is an async call from your service
+      
+      // After signInWithGoogle completes, onAuthUserChanged will fire, 
+      // setting currentUser and authLoading to false.
+      // The redirect logic for new users should ideally be triggered by onAuthUserChanged
+      // or by a state change once currentUser is set.
 
-        if (!docSnap.exists() || !docSnap.data()?.username) {
+      if (user && db) {
+        // This Firestore check can run here. If it's a new user, redirect.
+        // onAuthUserChanged will still set the final auth state.
+        const userDocRef = doc(db, "users", user.uid);
+        console.log(`[handleGoogleSignIn] User object from signInWithGoogle:`, user);
+        console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
+        const docSnap = await getDoc(userDocRef);
+        console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}`);
+        const userData = docSnap.data();
+        console.log(`[handleGoogleSignIn] Firestore userData:`, userData);
+
+        if (!docSnap.exists() || !userData?.username) {
+          console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
           toast({ title: "Welcome!", description: "Please complete your profile." });
           router.push('/profile');
+          // No need to setAuthLoading(false) here; onAuthUserChanged will handle it.
         } else {
+          console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
           toast({ title: "Signed In", description: "Successfully signed in with Google." });
+          // No need to setAuthLoading(false) here; onAuthUserChanged will handle it.
         }
       } else if (user) {
-         toast({ title: "Signed In", description: "Successfully signed in with Google." });
+        // User signed in, but db might not be available or an issue occurred
+        console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available OR user object was incomplete for profile check.");
+        toast({ title: "Signed In", description: "Successfully signed in with Google." });
+         // No need to setAuthLoading(false) here; onAuthUserChanged will handle it.
       }
+      // If signInWithGoogle itself throws, the catch block handles setAuthLoading(false)
     } catch (error: any) {
-      console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
+      console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
       const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
       let hostnameToAdd = 'localhost'; 
@@ -444,8 +464,7 @@ const HomePage = () => {
         4. Restart your Next.js dev server after .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
-    }  finally {
-        setAuthLoading(false); 
+      setAuthLoading(false); // Ensure loading is false if the sign-in attempt fails
     }
   };
 
@@ -455,11 +474,11 @@ const HomePage = () => {
     try {
       await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
+      // onAuthUserChanged will set currentUser to null and authLoading to false
     } catch (error: any) {      
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-    } finally {
-        setAuthLoading(false); 
+      setAuthLoading(false); // Ensure loading is false if sign-out fails
     }
   };
 
@@ -713,18 +732,17 @@ const HomePage = () => {
                   value={radius}
                    onChange={(e) => {
                     const value = e.target.value;
-                    // Allow only digits or empty string
                     if (value === "" || /^\d*$/.test(value)) {
                       setRadius(value);
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") return; // Allow empty string for user to clear
+                    if (radius === "") return; 
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); // Reset to empty if invalid
+                      setRadius(""); 
                     } else {
-                      setRadius(String(num)); // Normalize valid number
+                      setRadius(String(num)); 
                     }
                   }}
                   placeholder="5 - 100"
