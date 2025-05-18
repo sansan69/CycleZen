@@ -8,7 +8,7 @@ import type { User } from "firebase/auth";
 import {
   collection,
   addDoc,
-  doc, 
+  doc,
   getDoc,
 } from "firebase/firestore";
 import Link from "next/link";
@@ -16,11 +16,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 
-import { db } from "@/lib/firebase"; 
-import { 
-  signInWithGoogle, 
-  signOutUser, 
-  onAuthUserChanged 
+import { db } from "@/lib/firebase";
+import {
+  signInWithGoogle,
+  signOutUser,
+  onAuthUserChanged
 } from "@/lib/firebaseAuthService";
 
 import {
@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider"; 
+import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
@@ -67,12 +67,12 @@ const RouteDisplay = ({
 }: {
   route: CyclingRoute;
   user: User | null;
-  selectedLocationForRouteName: Coordinate | null; 
+  selectedLocationForRouteName: Coordinate | null;
   routeIndex: number;
 }) => {
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null); 
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   const mapStyles = {
     height: "300px",
@@ -92,7 +92,7 @@ const RouteDisplay = ({
         lng: (minLng + maxLng) / 2,
       });
     } else {
-      setCenter({ lat: 0, lng: 0 }); 
+      setCenter({ lat: 0, lng: 0 });
     }
   }, [route]);
 
@@ -122,7 +122,7 @@ const RouteDisplay = ({
 
   let waypointsForGoogleMaps: Coordinate[] = [];
   if (route.coordinates && route.coordinates.length > 0) {
-    waypointsForGoogleMaps.push(route.coordinates[0]); 
+    waypointsForGoogleMaps.push(route.coordinates[0]);
 
     if (route.coordinates.length > 2 && route.coordinates.length > MAX_GOOGLE_MAPS_WAYPOINTS) {
         const numIntermediatePoints = MAX_GOOGLE_MAPS_WAYPOINTS - 2;
@@ -136,21 +136,21 @@ const RouteDisplay = ({
             }
         }
     }
-    
+
     if (route.coordinates.length > 1) {
         const endPoint = route.coordinates[route.coordinates.length - 1];
-        if (waypointsForGoogleMaps.length < MAX_GOOGLE_MAPS_WAYPOINTS || 
-            (waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS && 
+        if (waypointsForGoogleMaps.length < MAX_GOOGLE_MAPS_WAYPOINTS ||
+            (waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS &&
              waypointsForGoogleMaps[waypointsForGoogleMaps.length-1].lat !== endPoint.lat &&
              waypointsForGoogleMaps[waypointsForGoogleMaps.length-1].lng !== endPoint.lng)) {
-            
+
             if(waypointsForGoogleMaps.length === MAX_GOOGLE_MAPS_WAYPOINTS) {
-                 waypointsForGoogleMaps.pop(); 
+                 waypointsForGoogleMaps.pop();
             }
             waypointsForGoogleMaps.push(endPoint);
         }
     }
-   
+
      waypointsForGoogleMaps = waypointsForGoogleMaps.filter((point, index, self) =>
         index === self.findIndex((p) => p.lat === point.lat && p.lng === point.lng)
     );
@@ -196,10 +196,10 @@ const RouteDisplay = ({
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       // Exclude geometry from being saved, as Firestore doesn't support nested arrays within it well.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { geometry, ...routeDataToSave } = route; 
+      const { geometry, ...routeDataToSave } = route;
 
       await addDoc(userSavedRoutesCollection, {
-        routeData: routeDataToSave, 
+        routeData: routeDataToSave,
         timestamp: new Date(),
         routeName: `Route Option ${routeIndex + 1} near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
@@ -242,7 +242,7 @@ const RouteDisplay = ({
   };
 
 
-  if (!center && !(route.coordinates && route.coordinates.length > 0)) { 
+  if (!center && !(route.coordinates && route.coordinates.length > 0)) {
     return <Skeleton className="h-[400px] w-full" />;
   }
 
@@ -284,27 +284,27 @@ const RouteDisplay = ({
       <CardContent>
         {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
           <div className="rounded-md overflow-hidden border border-border">
-            <GoogleMap 
-              mapContainerStyle={mapStyles} 
-              center={mapInitialCenter} 
-              options={{ 
-                streetViewControl: false, 
-                mapTypeControl: false, 
-                fullscreenControl: true 
+            <GoogleMap
+              mapContainerStyle={mapStyles}
+              center={mapInitialCenter}
+              options={{
+                streetViewControl: false,
+                mapTypeControl: false,
+                fullscreenControl: true
               }}
-              onLoad={onMapLoad} 
+              onLoad={onMapLoad}
             >
               {route.coordinates && route.coordinates.length > 0 && (
                 <>
-                  <Polyline 
-                    path={route.coordinates} 
-                    options={{ 
-                      strokeColor: "hsl(var(--primary))", 
-                      strokeWeight: 3, 
-                      strokeOpacity: 0.8 
-                    }} 
+                  <Polyline
+                    path={route.coordinates}
+                    options={{
+                      strokeColor: "hsl(var(--primary))",
+                      strokeWeight: 3,
+                      strokeOpacity: 0.8
+                    }}
                   />
-                  <Marker position={route.coordinates[0]} /> 
+                  <Marker position={route.coordinates[0]} />
                 </>
               )}
             </GoogleMap>
@@ -323,7 +323,7 @@ const RouteDisplay = ({
           </Button>
           <Button
             onClick={handleSaveRoute}
-            disabled={!user || !user.uid} 
+            disabled={!user || !user.uid}
             className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
           >
             <Icons.bookmark className="mr-2 h-4 w-4" /> Save this route
@@ -337,7 +337,7 @@ const RouteDisplay = ({
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 const HomePage = () => {
-  const [radius, setRadius] = useState<string>("5"); 
+  const [radius, setRadius] = useState<string>("5");
   const [showMapInput, setShowMapInput] = useState<boolean>(true);
   const [routes, setRoutes] = useState<CyclingRoute[] | null>(null);
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
@@ -373,7 +373,7 @@ const HomePage = () => {
     console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "Not Set (Optional)");
     console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "Not Set (Optional)");
     console.log("----------------------------------------------");
-    
+
     let missingVars: string[] = [];
     if (!envApiKey) missingVars.push("API Key");
     if (!envProjectId) missingVars.push("Project ID");
@@ -383,16 +383,16 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(false);
-        return; 
+        // setAuthLoading(false); // Keep authLoading true to disable auth UI
+        return;
     }
-    
+
     console.log('page.tsx useEffect: Project ID from env is:', envProjectId);
     console.log('page.tsx useEffect: Auth Domain from env is:', envAuthDomain);
 
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false); 
+      setAuthLoading(false);
       if (user) {
         console.log("page.tsx onAuthUserChanged: User signed in:", user.uid);
       } else {
@@ -401,23 +401,17 @@ const HomePage = () => {
     });
 
     return () => unsubscribe();
-  }, [toast]); 
+  }, [toast]);
 
 
   const handleGoogleSignIn = async () => {
     console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
-    setAuthLoading(true); 
+    setAuthLoading(true);
     try {
-      const user = await signInWithGoogle(); 
+      const user = await signInWithGoogle();
       console.log("[handleGoogleSignIn] signInWithGoogle service call completed. User from service:", user);
-      
+
       if (user) {
-        // Temporarily simplified: just show success toast
-        toast({ title: "Signed In", description: "Successfully signed in with Google." });
-        // The onAuthUserChanged listener will handle setting currentUser and authLoading.
-        
-        // Original logic for profile check and redirect (currently commented out for diagnosis):
-        /*
         if (db) {
           const userDocRef = doc(db, "users", user.uid);
           console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
@@ -437,33 +431,29 @@ const HomePage = () => {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
         }
-        */
       } else {
-        // This case should ideally not be reached if signInWithGoogle throws on failure
-        // or returns null only on explicit user cancellation not treated as an error.
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service.");
-        // setAuthLoading(false) // Might be needed if onAuthUserChanged doesn't fire
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
-      
+
       if (error.code === 'auth/popup-closed-by-user') {
         toast({
           title: "Sign-in Cancelled",
           description: "The Google login window was closed before sign-in could complete.",
-          variant: "default", 
+          variant: "default",
           duration: 5000
         });
       } else if (error.code === 'auth/unauthorized-domain') {
         const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-        let hostnameToAdd = 'localhost'; 
+        let hostnameToAdd = 'localhost';
         try {
           hostnameToAdd = new URL(currentOrigin).hostname;
         } catch(e) {
           console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-          hostnameToAdd = currentOrigin; 
+          hostnameToAdd = currentOrigin;
         }
-        const unauthorizedDomainDescription = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
+        const unauthorizedDomainDescription = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In.
         Current Origin: ${currentOrigin}. Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Project ID: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'Not Set'}.
         Troubleshooting:
@@ -485,15 +475,15 @@ const HomePage = () => {
     try {
       await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
-    } catch (error: any)      {
+    } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); 
+      setAuthLoading(false);
     }
   };
 
   const isRadiusValid = (r: string): boolean => {
-    if (r === "") return false; 
+    if (r === "") return false;
     const num = parseInt(r, 10);
     return !isNaN(num) && num >= 5 && num <= 100;
   };
@@ -519,7 +509,7 @@ const HomePage = () => {
     }
 
     setLoadingRoutes(true);
-    setRoutes(null); 
+    setRoutes(null);
     try {
       const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
       if (!apiKey) {
@@ -534,9 +524,9 @@ const HomePage = () => {
       const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
-        setShowMapInput(false); 
+        setShowMapInput(false);
         if (searchInputRef.current) {
-          searchInputRef.current.value = ''; 
+          searchInputRef.current.value = '';
         }
         toast({
           title: "Routes Generated",
@@ -546,7 +536,7 @@ const HomePage = () => {
         toast({
           title: "No Routes Found",
           description: "Could not find any cycling routes for the selected criteria. Try adjusting the radius or location.",
-          variant: "default", 
+          variant: "default",
         });
       }
     } catch (error: any)      {
@@ -560,13 +550,13 @@ const HomePage = () => {
       setLoadingRoutes(false);
     }
   }, [selectedLocation, radius, toast]);
-  
+
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
-  }, []); 
+  }, []);
 
   useEffect(() => {
-    if (selectedLocation && previousSelectedLocationRef.current) { 
+    if (selectedLocation && previousSelectedLocationRef.current) {
       if (previousSelectedLocationRef.current.lat !== selectedLocation.lat ||
           previousSelectedLocationRef.current.lng !== selectedLocation.lng) {
         toast({
@@ -575,8 +565,8 @@ const HomePage = () => {
         });
       }
     }
-    previousSelectedLocationRef.current = selectedLocation; 
-  }, [selectedLocation, toast]); 
+    previousSelectedLocationRef.current = selectedLocation;
+  }, [selectedLocation, toast]);
 
   const currentRadiusValue = parseInt(radius, 10);
   const displayRadius = !isNaN(currentRadiusValue) && currentRadiusValue >=5 && currentRadiusValue <=100 ? currentRadiusValue : (radius === "" ? "" : 5);
@@ -615,7 +605,7 @@ const HomePage = () => {
       console.log('Autocomplete is not loaded yet for onPlaceChanged!');
     }
   };
-  
+
   const capitalizeName = (name: string | null | undefined): string => {
     if (!name) return "";
     return name
@@ -630,7 +620,7 @@ const HomePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
-      
+
       <div className="relative w-full h-52 sm:h-64 md:h-80 group shadow-lg">
         <Image
           src="https://img.redbull.com/images/c_crop,w_4927,h_2464,x_0,y_632/c_auto,w_1200,h_600/f_auto,q_auto/redbullcom/2016/02/16/1331777047411_1/a-pair-of-mountain-bikers-riding-in-the-dolomites-range-in-noertheastern-italy"
@@ -688,7 +678,7 @@ const HomePage = () => {
           </div>
         )}
       </header>
-      
+
       <main className="container mx-auto max-w-2xl p-4 sm:p-6 md:p-8">
         <Card className="mb-6 bg-card shadow-xl rounded-xl">
           <CardHeader>
@@ -737,7 +727,7 @@ const HomePage = () => {
               </label>
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Input
-                  type="text" 
+                  type="text"
                   id="radius"
                   value={radius}
                    onChange={(e) => {
@@ -747,12 +737,12 @@ const HomePage = () => {
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") return; 
+                    if (radius === "") return;
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); 
+                      setRadius("");
                     } else {
-                      setRadius(String(num)); 
+                      setRadius(String(num));
                     }
                   }}
                   placeholder="5 - 100"
@@ -799,9 +789,9 @@ const HomePage = () => {
             )}
           </CardContent>
           <CardFooter className="pt-6">
-            <Button 
-              onClick={handleGenerateRoutes} 
-              disabled={loadingRoutes || !selectedLocation || !isRadiusValid(radius)} 
+            <Button
+              onClick={handleGenerateRoutes}
+              disabled={loadingRoutes || !selectedLocation || !isRadiusValid(radius)}
               variant="accent"
               className="w-full"
             >
@@ -836,5 +826,5 @@ const HomePage = () => {
 };
 
 export default HomePage;
-    
 
+    
