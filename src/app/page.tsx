@@ -23,7 +23,6 @@ import {
   useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
-import html2canvas from 'html2canvas';
 
 
 import { db } from "@/lib/firebase";
@@ -133,7 +132,6 @@ const RouteDisplay = ({
     estimatedCalories: string;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
-  const rideSummaryContentRef = useRef<HTMLDivElement>(null);
 
 
   const mapStyles = {
@@ -245,7 +243,7 @@ const RouteDisplay = ({
         distance: route.distance,
         estimatedTime: route.estimatedTime,
         coordinates: route.coordinates, 
-        steps: route.steps || [], // Ensure steps is an array, even if empty
+        steps: route.steps || [],
       };
       
       if (route.ascent !== undefined && isFinite(route.ascent)) {
@@ -306,9 +304,6 @@ const RouteDisplay = ({
     if (userLocationMarker) { 
         setRideStartActualLocation(userLocationMarker);
     } else {
-        // If no live GPS at start, we can't accurately measure "actual" distance covered by GPS for this segment.
-        // We could use route.coordinates[0] as a fallback if we want to show *something* related to planned start.
-        // For now, if no userLocationMarker, rideStartActualLocation will be null.
         setRideStartActualLocation(null); 
     }
 
@@ -390,7 +385,7 @@ const RouteDisplay = ({
     setRideSummaryData({ 
         elapsedTime, 
         route,
-        actualDistanceCoveredKm, // This will be undefined if start/end GPS points weren't available
+        actualDistanceCoveredKm,
         estimatedCalories: estimateCaloriesBurned(actualDistanceCoveredKm ?? route.distance)
     });
     setShowRideSummaryDialog(true);
@@ -418,8 +413,8 @@ const RouteDisplay = ({
         actualDurationSeconds: rideSummaryData.elapsedTime,
         plannedDistanceKm: rideSummaryData.route.distance,
         estimatedCalories: rideSummaryData.estimatedCalories,
-        routeCoordinates: rideSummaryData.route.coordinates, // Save planned route coordinates
-        steps: rideSummaryData.route.steps || [], // Save planned steps
+        routeCoordinates: rideSummaryData.route.coordinates,
+        steps: rideSummaryData.route.steps || [],
       };
 
       if (rideSummaryData.actualDistanceCoveredKm !== undefined && isFinite(rideSummaryData.actualDistanceCoveredKm)) {
@@ -602,7 +597,7 @@ const RouteDisplay = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {rideSummaryData && (
-            <div ref={rideSummaryContentRef} className="space-y-4 my-4 p-4 bg-background rounded border border-border">
+            <div className="space-y-4 my-4 p-4 bg-background rounded border border-border">
               <div className="h-64 w-full rounded-md overflow-hidden border border-border">
                 {googleMapsApiKey ? (
                   <GoogleMap
@@ -744,7 +739,7 @@ const HomePage = () => {
         const message = `CRITICAL: Firebase config missing from client environment: ${missingVars.join(", ")}. Authentication will be unavailable. Check .env.local and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(message);
-        setAuthLoading(false); // Allow UI to render, albeit with auth disabled
+        setAuthLoading(false); 
         return;
     }
     console.log("--- Firebase Config from Client Environment ---");
@@ -800,14 +795,17 @@ const HomePage = () => {
         }
       } else {
          console.warn("[handleGoogleSignIn] signInWithGoogle service returned null. This might indicate the popup was closed by the user or an issue in the service layer.");
+         setAuthLoading(false); 
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
       const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
       let hostnameToAdd = 'localhost'; 
        try {
-          const url = new URL(currentOrigin);
-          hostnameToAdd = url.hostname;
+          if (typeof window !== 'undefined') {
+            const url = new URL(currentOrigin);
+            hostnameToAdd = url.hostname;
+          }
         } catch(e) {
           console.warn("Could not parse hostname from currentOrigin", currentOrigin);
           hostnameToAdd = currentOrigin; 
@@ -833,8 +831,7 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-    } finally {
-      // onAuthUserChanged will handle setting authLoading to false after user state is confirmed
+      setAuthLoading(false);
     }
   };
 
@@ -847,7 +844,6 @@ const HomePage = () => {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
     } 
-    // onAuthUserChanged will set authLoading to false
   };
 
   const isRadiusValid = (r: string): boolean => {
@@ -1010,19 +1006,14 @@ const HomePage = () => {
           </div>
         ) : currentUser ? (
            <div className="flex justify-between items-center w-full">
-             {/* Invisible placeholder to balance flexbox for centering the username */}
-             <div className="w-10 sm:w-12"> {/* Adjust width to match hamburger menu or desired spacing */}
-                {/* This could hold a back button or app icon in the future if needed */}
-             </div>
+             <div className="w-10 sm:w-12"> {/* Invisible placeholder */} </div>
 
-             {/* User Name - Centered */}
              <div className="flex-grow text-center">
-                <Link href="/profile" className="text-lg font-semibold text-primary hover:underline hover:text-primary/80 cursor-pointer">
-                  {capitalizeName(currentUser.displayName || currentUser.email)}
-                </Link>
+                <span className="text-lg font-semibold text-primary">
+                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
+                </span>
              </div>
 
-             {/* Hamburger Menu - Right Aligned */}
              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">
@@ -1031,6 +1022,12 @@ const HomePage = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile" className="cursor-pointer">
+                      <Icons.userCog className="mr-2 h-4 w-4" />
+                      <span>View Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/saved-routes" className="cursor-pointer">
                       <Icons.list className="mr-2 h-4 w-4" />
@@ -1114,19 +1111,18 @@ const HomePage = () => {
                   value={radius}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     const value = e.target.value;
-                    // Allow only digits or empty string
                     if (value === "" || /^\d*$/.test(value)) { 
                       setRadius(value);
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") return; // Keep empty if user left it empty
+                    if (radius === "") return; 
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); // Reset to empty if invalid
+                      setRadius(""); 
                       toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
                     } else {
-                      setRadius(String(num)); // Normalize valid input (e.g., "07" to "7")
+                      setRadius(String(num)); 
                     }
                   }}
                   placeholder="5 - 100"
@@ -1210,8 +1206,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
-      
-
-
-
