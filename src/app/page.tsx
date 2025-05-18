@@ -197,13 +197,17 @@ const RouteDisplay = ({
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { geometry, ascent, ...otherRouteProps } = route;
+      const { geometry, ...otherRouteProps } = route;
       const routeDataToSave: any = { ...otherRouteProps };
 
-      if (ascent !== undefined && isFinite(ascent)) {
-        routeDataToSave.ascent = ascent;
+      if (route.ascent !== undefined && isFinite(route.ascent)) {
+        routeDataToSave.ascent = route.ascent;
+      } else {
+        // Firestore doesn't support undefined. If ascent is undefined, don't include it.
+        // Or, set it to a specific null-like value if your app logic requires it.
+        // For now, we just don't add the field.
       }
+
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -361,7 +365,6 @@ const HomePage = () => {
   const router = useRouter();
 
   // Route Preferences State
-  const [avoidHighways, setAvoidHighways] = useState<boolean>(false);
   const [avoidTollways, setAvoidTollways] = useState<boolean>(false);
   const [avoidFerries, setAvoidFerries] = useState<boolean>(false);
 
@@ -406,7 +409,7 @@ const HomePage = () => {
 
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false); // Auth state is now known
+      setAuthLoading(false); 
       if (user) {
         console.log("page.tsx onAuthUserChanged: User signed in:", user.uid);
       } else {
@@ -441,15 +444,20 @@ const HomePage = () => {
             router.push('/profile');
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
+            // The onAuthUserChanged listener will handle setting currentUser and authLoading.
+            // We might still show a generic sign-in success toast here.
             toast({ title: "Signed In", description: "Successfully signed in with Google." });
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
+           // onAuthUserChanged will handle the main state update.
         }
       } else {
-        console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service.");
-        setAuthLoading(false); 
+        // This case (user is null after successful signInWithGoogle) should ideally not happen
+        // if the service behaves as expected.
+        console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service, but no error thrown.");
+        setAuthLoading(false); // Ensure loading state is cleared if no user and no error.
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -471,8 +479,8 @@ const HomePage = () => {
           duration: 5000
         });
       } else if (error.code === 'auth/unauthorized-domain') {
-        const unauthorizedDomainDescription = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In.
-        Current Origin: ${currentOrigin}.
+        const unauthorizedDomainDescription = `Error: Your app's current domain is not authorized for Google Sign-In.
+        Current Origin: ${currentOrigin}. Hostname to add: '${hostnameToAdd}'.
         Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Project ID: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'Not Set'}.
         Troubleshooting:
@@ -498,7 +506,7 @@ const HomePage = () => {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
     } finally {
-       setAuthLoading(false);
+       // onAuthUserChanged will handle setting currentUser to null and authLoading to false.
     }
   };
 
@@ -543,7 +551,6 @@ const HomePage = () => {
       }
 
       const selectedAvoidFeatures: string[] = [];
-      if (avoidHighways) selectedAvoidFeatures.push("highways");
       if (avoidTollways) selectedAvoidFeatures.push("tollways");
       if (avoidFerries) selectedAvoidFeatures.push("ferries");
 
@@ -575,7 +582,7 @@ const HomePage = () => {
     } finally {
       setLoadingRoutes(false);
     }
-  }, [selectedLocation, radius, toast, avoidHighways, avoidTollways, avoidFerries]);
+  }, [selectedLocation, radius, toast, avoidTollways, avoidFerries]);
 
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
@@ -684,7 +691,7 @@ const HomePage = () => {
             </div>
             <div className="text-sm text-foreground text-center order-1 sm:order-2 py-1 sm:py-0">
               <Link href="/profile" passHref>
-                <Button variant="link" className="text-sm text-foreground hover:text-primary p-0 h-auto">
+                <Button variant="link" className="text-sm text-foreground hover:text-primary p-0 h-auto hover:underline">
                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
                 </Button>
               </Link>
@@ -796,10 +803,6 @@ const HomePage = () => {
               <h3 className="text-md font-medium text-foreground">Route Preferences</h3>
               <div className="space-y-3">
                 <div className="flex items-center space-x-2">
-                  <Checkbox id="avoidHighways" checked={avoidHighways} onCheckedChange={(checked) => setAvoidHighways(checked as boolean)} />
-                  <Label htmlFor="avoidHighways" className="font-normal text-sm text-foreground">Avoid Highways</Label>
-                </div>
-                <div className="flex items-center space-x-2">
                   <Checkbox id="avoidTollways" checked={avoidTollways} onCheckedChange={(checked) => setAvoidTollways(checked as boolean)} />
                   <Label htmlFor="avoidTollways" className="font-normal text-sm text-foreground">Avoid Tollways</Label>
                 </div>
@@ -875,6 +878,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
-    
-
