@@ -47,8 +47,11 @@ import {
 import {
   GoogleMap,
   Polyline,
+  Autocomplete,
+  useJsApiLoader,
 } from "@react-google-maps/api";
 
+const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
 
 const RouteDisplay = ({
   route,
@@ -159,7 +162,6 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      // Exclude route.geometry when saving
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
@@ -266,11 +268,18 @@ const HomePage = () => {
   const { toast } = useToast();
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
   const previousSelectedLocationRef = useRef<Coordinate | null>(null);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [showInstallPrompt, setShowInstallPrompt] = useState<boolean>(false);
 
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: googleMapsApiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -287,7 +296,6 @@ const HomePage = () => {
     }
     setShowInstallPrompt(false);
   };
-
 
   useEffect(() => {
     const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -315,8 +323,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // Keep authLoading true to prevent login attempts if critical Firebase config is missing.
-        // setAuthLoading(false); // Explicitly not setting to false here to keep buttons disabled.
+        setAuthLoading(true);
         return; 
     }
     
@@ -475,6 +482,39 @@ const HomePage = () => {
   const displayRadius = !isNaN(currentRadiusValue) && currentRadiusValue >=5 && currentRadiusValue <=100 ? currentRadiusValue : (radius === "" ? "" : 5);
   const numericRadiusForMap = isRadiusValid(radius) ? parseInt(radius, 10) : null;
 
+  const onLoadAutocomplete = (autocompleteInstance: google.maps.places.Autocomplete) => {
+    setAutocomplete(autocompleteInstance);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete !== null) {
+      const place = autocomplete.getPlace();
+      if (place.geometry && place.geometry.location) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        if (lat && lng) {
+          setSelectedLocation({ lat, lng });
+           if (searchInputRef.current) {
+            searchInputRef.current.value = place.formatted_address || '';
+          }
+        } else {
+            toast({
+                title: "Invalid Location Data",
+                description: "The selected place did not provide valid coordinates.",
+                variant: "destructive",
+            });
+        }
+      } else {
+        toast({
+          title: "Location Not Found",
+          description: "Could not find the selected location's details. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      console.log('Autocomplete is not loaded yet for onPlaceChanged!');
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
@@ -574,6 +614,36 @@ const HomePage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6">
+            {isLoaded && (
+              <div className="grid gap-2">
+                 <label
+                    htmlFor="location-search"
+                    className="text-sm font-medium leading-none text-foreground"
+                  >
+                    Search for starting location
+                  </label>
+                <Autocomplete
+                  onLoad={onLoadAutocomplete}
+                  onPlaceChanged={onPlaceChanged}
+                  options={{ types: ['geocode', 'establishment'] }}
+                >
+                  <Input
+                    type="text"
+                    id="location-search"
+                    placeholder="Enter a location or address"
+                    ref={searchInputRef}
+                    className="bg-background border-input focus:ring-primary focus:border-primary rounded-md"
+                  />
+                </Autocomplete>
+              </div>
+            )}
+            {!isLoaded && !loadError && (
+                 <Skeleton className="h-10 w-full" />
+            )}
+            {loadError && (
+                <p className="text-sm text-destructive">Could not load Google Maps search. Please check your API key and internet connection.</p>
+            )}
+
             <div className="grid gap-2">
               <label
                 htmlFor="radius"
@@ -630,6 +700,9 @@ const HomePage = () => {
                   onLocationSelected={handleLocationSelected}
                   googleMapsApiKey={googleMapsApiKey}
                   searchRadiusKm={numericRadiusForMap}
+                  isLoaded={isLoaded}
+                  loadError={loadError}
+                  initialLocation={selectedLocation}
                 />
               </div>
             )}
@@ -682,14 +755,3 @@ const HomePage = () => {
 
 export default HomePage;
     
-
-    
-
-    
-
-
-
-
-
-
-
