@@ -22,6 +22,7 @@ import {
   useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
+import html2canvas from 'html2canvas';
 
 
 import { db } from "@/lib/firebase";
@@ -124,6 +125,7 @@ const RouteDisplay = ({
     actualDistanceCoveredKm?: number;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
+  const rideSummaryContentRef = useRef<HTMLDivElement>(null);
 
 
   const mapStyles = {
@@ -160,7 +162,7 @@ const RouteDisplay = ({
   }, [route.coordinates]);
 
   const onMapLoadSummary = useCallback((map: google.maps.Map, currentRoute: CyclingRoute) => {
-    mapRefSummary.current = map; // You might not need this ref if map interaction is minimal in summary
+    mapRefSummary.current = map; 
     if (currentRoute.coordinates && currentRoute.coordinates.length > 0 && google.maps.LatLngBounds) {
       const bounds = new google.maps.LatLngBounds();
       currentRoute.coordinates.forEach(coord => {
@@ -414,6 +416,64 @@ const RouteDisplay = ({
     setShowRideSummaryDialog(true);
   };
 
+  const handleShareAsImage = async () => {
+    if (!rideSummaryContentRef.current) {
+      toast({ title: "Error", description: "Cannot capture summary content.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const canvas = await html2canvas(rideSummaryContentRef.current, { 
+        useCORS: true,
+        // It's often good to remove the map controls before capture if html2canvas has trouble with them
+        // Or explicitly hide them with CSS during capture if possible
+        onclone: (documentClone) => {
+          const mapControls = documentClone.querySelectorAll('.gmnoprint');
+          mapControls.forEach(control => (control as HTMLElement).style.display = 'none');
+        }
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], 'cyclezen-ride-summary.png', { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'My CycleZen Ride Summary',
+          text: 'Check out my latest ride with CycleZen!',
+          files: [file],
+        });
+        toast({ title: "Shared!", description: "Ride summary image shared." });
+      } else {
+        // Fallback: Download the image
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = 'cyclezen-ride-summary.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast({ title: "Image Downloaded", description: "Image saved. You can share it manually." });
+      }
+    } catch (error) {
+      console.error("Error sharing image:", error);
+      toast({ title: "Share Error", description: "Could not share ride summary as image. Image downloaded instead.", variant: "destructive" });
+       // Attempt download as fallback on error too
+      if (rideSummaryContentRef.current) {
+        try {
+            const canvas = await html2canvas(rideSummaryContentRef.current, { useCORS: true });
+            const dataUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = 'cyclezen-ride-summary.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (downloadError) {
+            console.error("Error downloading image as fallback:", downloadError);
+        }
+      }
+    }
+  };
+
 
   if (!center && !(route.coordinates && route.coordinates.length > 0)) {
     return <Skeleton className="h-[400px] w-full" />;
@@ -586,7 +646,7 @@ const RouteDisplay = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {rideSummaryData && (
-            <div className="space-y-4 my-4">
+            <div ref={rideSummaryContentRef} className="space-y-4 my-4 p-4 bg-background rounded"> {/* Added ref and padding for capture */}
               <div className="h-64 w-full rounded-md overflow-hidden border border-border">
                 {googleMapsApiKey ? (
                   <GoogleMap
@@ -594,7 +654,7 @@ const RouteDisplay = ({
                     options={{
                       streetViewControl: false,
                       mapTypeControl: false,
-                      fullscreenControl: true,
+                      fullscreenControl: false, // Usually false for captured images
                       gestureHandling: 'cooperative'
                     }}
                     onLoad={(map) => onMapLoadSummary(map, rideSummaryData.route)}
@@ -652,6 +712,9 @@ const RouteDisplay = ({
             </div>
           )}
           <AlertDialogFooter>
+            <Button variant="outline" onClick={handleShareAsImage} className="mr-auto">
+                <Icons.shareAsImage className="mr-2 h-4 w-4" /> Share as Image
+            </Button>
             <AlertDialogAction onClick={() => {
               setShowRideSummaryDialog(false);
               setRideSummaryData(null); 
@@ -746,6 +809,7 @@ const HomePage = () => {
 
       if (user) {
         console.log(`[handleGoogleSignIn] User signed in: ${user.uid}. Checking Firestore for profile.`);
+        // Temporarily commenting out profile check and redirect for debugging auth/popup-closed-by-user
         if (db) {
           const userDocRef = doc(db, "users", user.uid);
           console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
@@ -759,13 +823,15 @@ const HomePage = () => {
             router.push('/profile');
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
+             toast({ title: "Signed In", description: `Welcome back, ${userData.username || user.displayName || user.email}!`});
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
+           toast({ title: "Signed In", description: `Welcome, ${user.displayName || user.email}!`});
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
-        setAuthLoading(false); 
+        // setAuthLoading(false); // This will be handled by onAuthUserChanged if sign-in truly failed
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -808,10 +874,12 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signOutUser();
+      toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); 
+    } finally {
+        // setAuthLoading(false); // This will be handled by onAuthUserChanged
     }
   };
 
