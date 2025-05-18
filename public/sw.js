@@ -1,110 +1,129 @@
-// Basic service worker
-const CACHE_NAME = 'cyclezen-cache-v1';
-const urlsToCache = [
+const CACHE_NAME = 'cyclezen-cache-v2'; // Incremented version
+const OFFLINE_URL = '/offline.html';
+const ASSETS_TO_CACHE = [
   '/',
   '/saved-routes',
-  // IMPORTANT: Add paths to your actual icon files here once you create them
+  '/manifest.json',
+  '/favicon.ico',
+  OFFLINE_URL,
+  // Add paths to specific icons if they are critical for the offline shell
   // e.g., '/icons/icon-192x192.png', '/icons/icon-512x512.png'
-  // For now, we are not caching the placeholder icons from placehold.co
+  // Next.js built JS/CSS are typically versioned, so caching them by specific name here is fragile.
+  // The strategy below handles them.
 ];
 
-self.addEventListener('install', event => {
+self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Service Worker: Opened cache');
-        return cache.addAll(urlsToCache.filter(url => !url.startsWith('https://placehold.co'))); // Avoid caching external placeholders
+      .then((cache) => {
+        console.log('[Service Worker] Opened cache and caching core assets');
+        return cache.addAll(ASSETS_TO_CACHE);
       })
+      .then(() => self.skipWaiting()) // Force activation of new SW
       .catch(error => {
-        console.error('Service Worker: Failed to cache during install', error);
+        console.error('[Service Worker] Failed to cache assets during install:', error);
       })
   );
-  self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
+    caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            console.log('Service Worker: Deleting old cache', cacheName);
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[Service Worker] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim()) // Take control of all clients
   );
-  return self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  // We only want to cache GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
 
-  // For navigation requests, try network first, then cache, then offline page (optional)
-  if (event.request.mode === 'navigate') {
+  // For navigation requests (HTML pages)
+  if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          // If successful, clone and cache it
-          if (response && response.status === 200) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseToCache);
-            });
+      (async () => {
+        try {
+          // Try network first
+          const networkResponse = await fetch(request);
+          return networkResponse;
+        } catch (error) {
+          // Network failed, try cache
+          console.log('[Service Worker] Network request for navigation failed, trying cache for:', request.url);
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) {
+            return cachedResponse;
           }
-          return response;
-        })
-        .catch(() => {
-          // If network fails, try to serve from cache
-          return caches.match(event.request)
-            .then(cachedResponse => {
-              if (cachedResponse) {
-                return cachedResponse;
-              }
-              // Optional: return a generic offline fallback page if even cache fails
-              // return caches.match('/offline.html'); 
-              // For this, you would need to create an offline.html and cache it.
-              // For now, let the browser handle the offline error for navigation.
-              return new Response("Network error and not in cache.", {
-                status: 408,
-                headers: { 'Content-Type': 'text/plain' },
-              });
-            });
-        })
+          // Not in cache, serve offline page
+          console.log('[Service Worker] Not in cache, serving offline page for:', request.url);
+          return await caches.match(OFFLINE_URL);
+        }
+      })()
     );
     return;
   }
 
-  // For other requests (CSS, JS, images), use a cache-first strategy
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response; // Serve from cache
+  // For static assets (images, manifest, favicon etc.) - Cache First, then Network
+  // This includes assets from placehold.co and img.redbull.com
+  if (request.destination === 'image' || 
+      request.url.endsWith('/manifest.json') || 
+      request.url.endsWith('/favicon.ico')) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
         }
-        // If not in cache, fetch from network and cache it
-        return fetch(event.request).then(
-          networkResponse => {
-            if (networkResponse && networkResponse.status === 200) {
-              // Do not cache responses from placehold.co or other external dynamic image services
-              if (!networkResponse.url.includes('placehold.co')) {
-                 const responseToCache = networkResponse.clone();
-                 caches.open(CACHE_NAME)
-                  .then(cache => {
-                    cache.put(event.request, responseToCache);
-                  });
-              }
-            }
-            return networkResponse;
-          }
-        ).catch(() => {
-           // For non-navigation, if fetch fails and not in cache, browser will show its default error
+        return fetch(request).then((networkResponse) => {
+          // Optionally cache new static assets dynamically if needed
+          // For now, relying on install-time caching for these.
+          return networkResponse;
         });
       })
-  );
+    );
+    return;
+  }
+  
+  // For Next.js JS/CSS chunks and other assets - Cache first, then Network
+  // These are often versioned, so if they are in cache, they are good.
+  if (request.url.includes('/_next/static/')) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(request).then((networkResponse) => {
+          // Cache these as they are fetched.
+          // This helps if some chunks were not part of the initial ASSETS_TO_CACHE
+          // (e.g. dynamically loaded component chunks)
+          return caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, networkResponse.clone());
+            return networkResponse;
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // For other requests (APIs like OpenRouteService, Google Maps API, Firestore)
+  // It's generally safer to let them go to network or be handled by their respective SDKs.
+  // Firebase SDK has its own offline persistence.
+  // Google Maps API also has complex loading.
+  // Attempting to cache these generically can lead to issues.
+  // So, default is network only for these.
+  event.respondWith(fetch(request).catch(() => {
+    // For API calls, if network fails, we don't have a generic offline response
+    // other than what the app itself might display.
+    // For Firestore, its SDK will handle offline queueing.
+    if (request.destination !== 'document') { // avoid serving offline.html for failed API calls.
+        // Could return a generic error response if desired for certain API patterns
+        // For now, let the browser handle the network error for non-navigation fetch
+    }
+    // Fallback for other types of failed requests if needed, but often just letting it fail is okay.
+  }));
 });
