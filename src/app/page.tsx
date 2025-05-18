@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -14,6 +13,7 @@ import {
   setDoc,
   serverTimestamp,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 import {
   GoogleMap,
@@ -23,6 +23,7 @@ import {
   useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
+import html2canvas from 'html2canvas';
 
 
 import { db } from "@/lib/firebase";
@@ -110,6 +111,7 @@ const RouteDisplay = ({
 }) => {
   const { toast } = useToast();
   const mapRef = useRef<google.maps.Map | null>(null);
+  const rideSummaryContentRef = useRef<HTMLDivElement>(null);
 
   // Ride Mode State
   const [isRideModeActive, setIsRideModeActive] = useState(false);
@@ -597,7 +599,7 @@ const RouteDisplay = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {rideSummaryData && (
-            <div className="space-y-4 my-4 p-4 bg-background rounded border border-border">
+            <div ref={rideSummaryContentRef} className="space-y-4 my-4 p-4 bg-background rounded border border-border">
               <div className="h-64 w-full rounded-md overflow-hidden border border-border">
                 {googleMapsApiKey ? (
                   <GoogleMap
@@ -1010,7 +1012,7 @@ const HomePage = () => {
 
              <div className="flex-grow text-center">
                 <span className="text-lg font-semibold text-primary">
-                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
+                   Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
                 </span>
              </div>
 
@@ -1102,7 +1104,7 @@ const HomePage = () => {
                 htmlFor="radius"
                 className="text-sm font-medium leading-none text-foreground"
               >
-                Target Loop Distance (approx. km)
+                Define Search Radius (km)
               </Label>
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Input
@@ -1135,14 +1137,14 @@ const HomePage = () => {
                   step={1}
                   onValueChange={(newValue) => setRadius(String(newValue[0]))}
                   className="w-full sm:flex-1"
-                  aria-label="Target loop distance slider"
+                  aria-label="Search radius for loop routes"
                 />
                 <span className="text-sm font-medium text-foreground w-full sm:w-12 text-center sm:text-right mt-2 sm:mt-0">
                   {isRadiusValid(radius) ? `${radius} km` : (radius === "" ? "" : "")}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Enter a target distance between 5 and 100 km for your loop ride.
+                 This radius defines the search area on the map. Generated loop routes will have a target distance based on this value (5-100 km).
               </p>
             </div>
             
