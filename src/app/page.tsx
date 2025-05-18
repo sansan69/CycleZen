@@ -194,7 +194,8 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      // Exclude geometry from being saved
+      // Exclude geometry from being saved, as Firestore doesn't support nested arrays within it well.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
@@ -410,26 +411,39 @@ const HomePage = () => {
       const user = await signInWithGoogle(); 
       console.log("[handleGoogleSignIn] signInWithGoogle service call completed. User from service:", user);
       
-      if (user && db) {
-        const userDocRef = doc(db, "users", user.uid);
-        console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
-        const docSnap = await getDoc(userDocRef);
-        const userData = docSnap.data();
-        console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
-
-        if (!docSnap.exists() || !userData?.username) {
-          console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
-          toast({ title: "Welcome!", description: "Please complete your profile." });
-          router.push('/profile');
-        } else {
-          console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-          toast({ title: "Signed In", description: "Successfully signed in with Google." });
-        }
-      } else if (user) {
-        console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available OR user object was incomplete for profile check.");
+      if (user) {
+        // Temporarily simplified: just show success toast
         toast({ title: "Signed In", description: "Successfully signed in with Google." });
+        // The onAuthUserChanged listener will handle setting currentUser and authLoading.
+        
+        // Original logic for profile check and redirect (currently commented out for diagnosis):
+        /*
+        if (db) {
+          const userDocRef = doc(db, "users", user.uid);
+          console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
+          const docSnap = await getDoc(userDocRef);
+          const userData = docSnap.data();
+          console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
+
+          if (!docSnap.exists() || !userData?.username) {
+            console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
+            toast({ title: "Welcome!", description: "Please complete your profile." });
+            router.push('/profile');
+          } else {
+            console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
+            toast({ title: "Signed In", description: "Successfully signed in with Google." });
+          }
+        } else {
+          console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
+          toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
+        }
+        */
+      } else {
+        // This case should ideally not be reached if signInWithGoogle throws on failure
+        // or returns null only on explicit user cancellation not treated as an error.
+        console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service.");
+        // setAuthLoading(false) // Might be needed if onAuthUserChanged doesn't fire
       }
-      // onAuthUserChanged will set authLoading to false after currentUser is set.
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
       
@@ -461,7 +475,7 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-      setAuthLoading(false); 
+      setAuthLoading(false); // Ensure loading is false on error
     }
   };
 
@@ -471,7 +485,7 @@ const HomePage = () => {
     try {
       await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
-    } catch (error: any) {      
+    } catch (error: any)      {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
       setAuthLoading(false); 
@@ -611,7 +625,7 @@ const HomePage = () => {
       .join(' ');
   };
 
-  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser);
+  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser, currentUser);
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
@@ -655,7 +669,7 @@ const HomePage = () => {
             <div className="text-sm text-foreground text-center order-1 sm:order-2 py-1 sm:py-0">
               <Link href="/profile" passHref>
                 <span className="cursor-pointer hover:underline hover:text-primary">
-                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
+                 Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
                 </span>
               </Link>
             </div>
@@ -823,3 +837,4 @@ const HomePage = () => {
 
 export default HomePage;
     
+
