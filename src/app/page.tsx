@@ -49,6 +49,7 @@ import {
   Polyline,
   Autocomplete,
   useJsApiLoader,
+  Marker, // Added Marker
 } from "@react-google-maps/api";
 
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
@@ -64,11 +65,14 @@ const RouteDisplay = ({
 }) => {
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null); // Ref for map instance
+
   const mapStyles = {
     height: "300px",
     width: "100%",
   };
 
+  // Calculate initial center of the route
   useEffect(() => {
     if (route.coordinates && route.coordinates.length > 0) {
       const latitudes = route.coordinates.map(p => p.lat);
@@ -85,6 +89,30 @@ const RouteDisplay = ({
       setCenter({ lat: 0, lng: 0 }); 
     }
   }, [route]);
+
+  // Fit map bounds to the route polyline
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    if (route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
+      const bounds = new google.maps.LatLngBounds();
+      route.coordinates.forEach(coord => {
+        bounds.extend(new google.maps.LatLng(coord.lat, coord.lng));
+      });
+      map.fitBounds(bounds);
+    }
+  }, [route.coordinates]);
+
+  // Re-fit bounds if route coordinates change after map is loaded
+  useEffect(() => {
+    if (mapRef.current && route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
+      const bounds = new google.maps.LatLngBounds();
+      route.coordinates.forEach(coord => {
+        bounds.extend(new google.maps.LatLng(coord.lat, coord.lng));
+      });
+      mapRef.current.fitBounds(bounds);
+    }
+  }, [route.coordinates]);
+
 
   const MAX_GOOGLE_MAPS_WAYPOINTS = 10;
 
@@ -167,6 +195,7 @@ const RouteDisplay = ({
         estimatedTime: route.estimatedTime,
         ascent: route.ascent,
         coordinates: route.coordinates,
+        // Do NOT save route.geometry here as it causes Firestore nested array errors
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -213,9 +242,12 @@ const RouteDisplay = ({
   };
 
 
-  if (!center) {
+  if (!center && !(route.coordinates && route.coordinates.length > 0)) { // Show skeleton if no center and no coords to fit yet
     return <Skeleton className="h-[400px] w-full" />;
   }
+
+  const mapInitialCenter = center || (route.coordinates && route.coordinates.length > 0 ? route.coordinates[0] : { lat: 0, lng: 0 });
+
 
   return (
     <Card className="bg-card shadow-lg rounded-lg">
@@ -250,10 +282,32 @@ const RouteDisplay = ({
         </div>
       </CardHeader>
       <CardContent>
-        {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && center ? (
+        {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
           <div className="rounded-md overflow-hidden border border-border">
-            <GoogleMap mapContainerStyle={mapStyles} zoom={12} center={center} options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}>
-              <Polyline path={route.coordinates} options={{ strokeColor: "hsl(var(--primary))", strokeWeight: 3, strokeOpacity: 0.8 }} />
+            <GoogleMap 
+              mapContainerStyle={mapStyles} 
+              center={mapInitialCenter} // Use initial center
+              // zoom prop removed, fitBounds will handle zoom
+              options={{ 
+                streetViewControl: false, 
+                mapTypeControl: false, 
+                fullscreenControl: true // Enabled fullscreen control
+              }}
+              onLoad={onMapLoad} // Use the onLoad callback
+            >
+              {route.coordinates && route.coordinates.length > 0 && (
+                <>
+                  <Polyline 
+                    path={route.coordinates} 
+                    options={{ 
+                      strokeColor: "hsl(var(--primary))", 
+                      strokeWeight: 3, 
+                      strokeOpacity: 0.8 
+                    }} 
+                  />
+                  <Marker position={route.coordinates[0]} /> 
+                </>
+              )}
             </GoogleMap>
           </div>
         ) : (
@@ -602,7 +656,7 @@ const HomePage = () => {
             </Button>
           </div>
         ) : currentUser ? (
-          <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] sm:items-center gap-3 w-full">
+           <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] sm:items-center gap-3 w-full">
             <div className="w-full sm:w-auto order-2 sm:order-1 sm:justify-self-start">
               <Link href="/saved-routes" passHref>
                 <Button variant="outline" className="w-full">
@@ -779,3 +833,4 @@ const HomePage = () => {
 
 export default HomePage;
     
+
