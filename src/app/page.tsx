@@ -315,7 +315,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(true); // Keep authLoading true
+        // Keep authLoading true to prevent login attempts
         return; 
     }
     
@@ -485,7 +485,7 @@ const HomePage = () => {
             <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground">
               Get the best experience by adding CycleZen to your home screen.
-              <div>
+              <div className="pt-2">
                 <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
                 <ol className="list-decimal list-inside pl-4">
                   <li>Tap the three dots (⋮) in the top-right corner of Chrome.</li>
@@ -493,7 +493,7 @@ const HomePage = () => {
                   <li>Follow the prompts.</li>
                 </ol>
               </div>
-              <div>
+              <div className="pt-2">
                 <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
                 <ol className="list-decimal list-inside pl-4">
                   <li>Tap the "Share" icon (square with an arrow pointing up) at the bottom.</li>
@@ -588,7 +588,7 @@ const HomePage = () => {
                   value={radius}
                   onChange={(e) => {
                     const value = e.target.value;
-                    if (value === "" || /^\d*$/.test(value)) { // Allow only digits or empty string
+                    if (value === "" || /^\d*$/.test(value)) { 
                       setRadius(value);
                     }
                   }}
@@ -686,6 +686,7 @@ export default HomePage;
     
 
     
+
 
 
 
