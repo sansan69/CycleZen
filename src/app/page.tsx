@@ -77,7 +77,10 @@ const formatTime = (seconds: number): string => {
   ].filter(Boolean).join(':');
 };
 
-const estimateCaloriesBurned = (distanceKm: number): string => {
+const estimateCaloriesBurned = (distanceKm: number | undefined): string => {
+  if (typeof distanceKm !== 'number' || !isFinite(distanceKm) || distanceKm <= 0) {
+    return 'N/A';
+  }
   // Very rough estimate: ~60 calories per km for moderate cycling.
   // This is a placeholder and actual calorie expenditure varies greatly.
   const calories = Math.round(distanceKm * 60);
@@ -109,12 +112,15 @@ const RouteDisplay = ({
   const [userLocationMarker, setUserLocationMarker] = useState<Coordinate | null>(null);
   const locationWatcherIdRef = useRef<number | null>(null);
   const [showStartRideDialog, setShowStartRideDialog] = useState(false);
+  const [rideStartActualLocation, setRideStartActualLocation] = useState<Coordinate | null>(null);
+
 
   // Ride Summary State
   const [showRideSummaryDialog, setShowRideSummaryDialog] = useState(false);
   const [rideSummaryData, setRideSummaryData] = useState<{
     elapsedTime: number;
     route: CyclingRoute;
+    actualDistanceCoveredKm?: number;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
 
@@ -257,9 +263,8 @@ const RouteDisplay = ({
 
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
-      } else {
-        // Firestore handles omitting undefined fields, or you can explicitly delete routeDataToSave.ascent
       }
+      // Firestore handles omitting undefined fields, or you can explicitly delete routeDataToSave.ascent if ascent is undefined
       
       if (route.steps) {
         routeDataToSave.steps = route.steps;
@@ -316,6 +321,15 @@ const RouteDisplay = ({
     setIsRidePaused(false);
     rideStartTimeRef.current = Date.now() - elapsedTime * 1000; 
     setElapsedTime(0); 
+    
+    if (userLocationMarker) { // If we have a current GPS location, use that as the actual start
+        setRideStartActualLocation(userLocationMarker);
+    } else if (route.coordinates && route.coordinates.length > 0) { // Otherwise, use the route's defined start
+        setRideStartActualLocation(route.coordinates[0]);
+    } else {
+        setRideStartActualLocation(null); // Fallback, should ideally not happen if route is valid
+    }
+
 
     if (rideTimerRef.current) clearInterval(rideTimerRef.current);
     rideTimerRef.current = setInterval(() => {
@@ -376,16 +390,28 @@ const RouteDisplay = ({
   };
 
   const handleStopRide = () => {
+    let actualDistanceCoveredKm: number | undefined = undefined;
+
+    if (rideStartActualLocation && userLocationMarker && window.google && window.google.maps && window.google.maps.geometry && window.google.maps.geometry.spherical) {
+        const startLatLng = new google.maps.LatLng(rideStartActualLocation.lat, rideStartActualLocation.lng);
+        const endLatLng = new google.maps.LatLng(userLocationMarker.lat, userLocationMarker.lng);
+        const distanceMeters = google.maps.geometry.spherical.computeDistanceBetween(startLatLng, endLatLng);
+        actualDistanceCoveredKm = distanceMeters / 1000;
+    }
+
     setIsRideModeActive(false);
     setIsRidePaused(false);
     if (rideTimerRef.current) clearInterval(rideTimerRef.current);
     if (locationWatcherIdRef.current) navigator.geolocation.clearWatch(locationWatcherIdRef.current);
     locationWatcherIdRef.current = null;
-    setUserLocationMarker(null);
+    // Keep userLocationMarker to show on summary, or set to null if you prefer not to show it post-ride.
     
-    setRideSummaryData({ elapsedTime, route });
+    setRideSummaryData({ 
+        elapsedTime, 
+        route,
+        actualDistanceCoveredKm 
+    });
     setShowRideSummaryDialog(true);
-    // The toast for "Ride Finished" can be removed as the dialog will show.
   };
 
 
@@ -591,29 +617,46 @@ const RouteDisplay = ({
                   <Skeleton className="h-full w-full bg-muted" />
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center pt-2">
+              <div className="grid grid-cols-1 gap-4 text-center pt-2">
                 <div>
                   <p className="text-2xl font-bold text-primary">{formatTime(rideSummaryData.elapsedTime)}</p>
                   <p className="text-sm text-muted-foreground">Duration</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
-                  <p className="text-sm text-muted-foreground">Distance</p>
-                </div>
+                
+                {rideSummaryData.actualDistanceCoveredKm !== undefined ? (
+                    <div>
+                      <p className="text-2xl font-bold text-primary">{rideSummaryData.actualDistanceCoveredKm.toFixed(1)} km</p>
+                      <p className="text-sm text-muted-foreground">Actual Distance Covered</p>
+                    </div>
+                ) : (
+                    <div>
+                        <p className="text-2xl font-bold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
+                        <p className="text-sm text-muted-foreground">Planned Distance</p>
+                    </div>
+                )}
+
                 <div>
                   <p className="text-2xl font-bold text-primary">
-                    {estimateCaloriesBurned(rideSummaryData.route.distance)}
+                    {estimateCaloriesBurned(rideSummaryData.actualDistanceCoveredKm ?? rideSummaryData.route.distance)}
                   </p>
                   <p className="text-sm text-muted-foreground">Est. Calories</p>
                 </div>
+
+                {rideSummaryData.actualDistanceCoveredKm !== undefined && (
+                     <div className="mt-1">
+                        <p className="text-base font-semibold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
+                        <p className="text-xs text-muted-foreground">Total Planned Route Distance</p>
+                    </div>
+                )}
               </div>
             </div>
           )}
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => {
               setShowRideSummaryDialog(false);
-              setRideSummaryData(null); // Clear summary data
-              setElapsedTime(0); // Reset timer for next potential ride
+              setRideSummaryData(null); 
+              setElapsedTime(0); 
+              setRideStartActualLocation(null); 
             }}>
               Done
             </AlertDialogAction>
@@ -710,7 +753,7 @@ const HomePage = () => {
           const userData = docSnap.data();
           console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
           console.log(`[handleGoogleSignIn] For new user check: !docSnap.exists() is ${!docSnap.exists()}, !userData?.username is ${!userData?.username}`);
-
+            
           if (!docSnap.exists() || !userData?.username) {
             console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
             toast({ title: "Welcome!", description: "Please complete your profile." });
@@ -1129,3 +1172,4 @@ const HomePage = () => {
 
 export default HomePage;
 
+    
