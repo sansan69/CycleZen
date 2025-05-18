@@ -104,7 +104,7 @@ const SavedRoutesPage = () => {
   const [editedRouteNotes, setEditedRouteNotes] = useState("");
 
   const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-saved-routes-script",
+    id: "google-map-script", // Changed ID to be consistent
     googleMapsApiKey: googleMapsApiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
