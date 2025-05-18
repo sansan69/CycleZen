@@ -382,7 +382,6 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // Keep authLoading true to prevent login attempts
         return; 
     }
     
@@ -435,17 +434,19 @@ const HomePage = () => {
       }
 
       if (error.code === 'auth/unauthorized-domain') {
-        description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
+         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
         Current Origin: ${currentOrigin}. Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
+        Project ID: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'Not Set'}.
         Troubleshooting:
-        1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
+        1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' (and 'localhost' if developing locally) is listed.
         2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file matches your Firebase project's Auth Domain.
-        3. Verify all NEXT_PUBLIC_FIREBASE_* vars are correct.
+        3. Verify all NEXT_PUBLIC_FIREBASE_* vars in .env.local are correct for the project.
         4. Restart your Next.js dev server after .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
-      setAuthLoading(false); 
-    } 
+    }  finally {
+        setAuthLoading(false); 
+    }
   };
 
   const handleSignOut = async () => {
@@ -585,8 +586,17 @@ const HomePage = () => {
       console.log('Autocomplete is not loaded yet for onPlaceChanged!');
     }
   };
+  
+  const capitalizeName = (name: string | null | undefined): string => {
+    if (!name) return "";
+    return name
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
 
-  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser, currentUser); // Diagnostic log
+  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser, currentUser);
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
@@ -619,16 +629,20 @@ const HomePage = () => {
             </Button>
           </div>
         ) : currentUser ? (
-           <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] sm:items-center gap-3 w-full">
+           <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] items-center gap-3 w-full">
             <div className="w-full sm:w-auto order-2 sm:order-1 sm:justify-self-start">
-              <Link href="/profile" passHref>
+              <Link href="/saved-routes" passHref>
                 <Button variant="outline" className="w-full">
-                  <Icons.userCog className="mr-2 h-4 w-4" /> Profile
+                  <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
                 </Button>
               </Link>
             </div>
             <div className="text-sm text-foreground text-center order-1 sm:order-2 py-1 sm:py-0">
-              Hi, {currentUser.displayName || currentUser.email}
+              <Link href="/profile" passHref>
+                <span className="cursor-pointer hover:underline hover:text-primary">
+                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
+                </span>
+              </Link>
             </div>
             <div className="w-full sm:w-auto order-3 sm:order-3 sm:justify-self-end">
               <Button variant="outline" onClick={handleSignOut} className="w-full">
@@ -697,22 +711,20 @@ const HomePage = () => {
                   type="text" 
                   id="radius"
                   value={radius}
-                  onChange={(e) => {
+                   onChange={(e) => {
                     const value = e.target.value;
-                    if (value === "" || /^\d*$/.test(value)) { 
+                    // Allow only digits or empty string
+                    if (value === "" || /^\d*$/.test(value)) {
                       setRadius(value);
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") { 
-                      setRadius(""); 
-                      return; 
-                    }
+                    if (radius === "") return; // Allow empty string for user to clear
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); 
+                      setRadius(""); // Reset to empty if invalid
                     } else {
-                      setRadius(String(num)); 
+                      setRadius(String(num)); // Normalize valid number
                     }
                   }}
                   placeholder="5 - 100"
@@ -728,7 +740,7 @@ const HomePage = () => {
                   aria-label="Radius slider"
                 />
                 <span className="text-sm font-medium text-foreground w-full sm:w-12 text-center sm:text-right mt-2 sm:mt-0">
-                  {displayRadius}{radius !== "" ? " km" : ""}
+                  {displayRadius}{radius !== "" && isRadiusValid(radius) ? " km" : ""}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
