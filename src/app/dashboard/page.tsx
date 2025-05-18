@@ -81,7 +81,7 @@ const DashboardPage = () => {
   const { toast } = useToast();
 
   const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-dashboard-script", 
+    id: "google-map-script", 
     googleMapsApiKey: googleMapsApiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
