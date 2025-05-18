@@ -182,7 +182,7 @@ const RouteDisplay = ({
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). The raw geometry causing this has been excluded.";
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
       } else if (error.message) {
         description = error.message;
       }
@@ -323,7 +323,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(true);
+        // authLoading remains true, disabling login buttons
         return; 
     }
     
@@ -356,22 +356,19 @@ const HomePage = () => {
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
        if (error.code === 'auth/unauthorized-domain') {
         const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-        const configuredAuthDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set in .env.local';
         let hostnameToAdd = 'localhost'; 
-        if (typeof window !== 'undefined' && currentOrigin !== 'unknown' && !currentOrigin.includes('localhost')) {
-            try {
-                hostnameToAdd = new URL(currentOrigin).hostname;
-            } catch (e) {
-                console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-                hostnameToAdd = currentOrigin; 
-            }
+        try {
+          hostnameToAdd = new URL(currentOrigin).hostname;
+        } catch(e) {
+          console.warn("Could not parse hostname from currentOrigin", currentOrigin);
+          hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
         }
         
         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
-        Current Origin: ${currentOrigin}. Configured Firebase Auth Domain in .env.local: ${configuredAuthDomain}.
+        Current Origin: ${currentOrigin}. Configured Firebase Auth Domain in .env.local: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Troubleshooting:
         1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
-        2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in .env.local ('${configuredAuthDomain}') matches your Firebase project's Auth Domain.
+        2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in .env.local matches your Firebase project's Auth Domain.
         3. Verify all NEXT_PUBLIC_FIREBASE_* vars are correct.
         4. Restart your Next.js dev server after .env.local changes.`;
       }
@@ -438,7 +435,10 @@ const HomePage = () => {
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false); 
-         toast({
+        if (searchInputRef.current) {
+          searchInputRef.current.value = ''; // Reset search input
+        }
+        toast({
           title: "Routes Generated",
           description: `${generatedRoutes.length} cycling routes found.`,
         });
