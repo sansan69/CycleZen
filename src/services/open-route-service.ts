@@ -91,7 +91,6 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
   const profile = "cycling-regular";
   const url = `https://api.openrouteservice.org/v2/directions/${profile}/geojson`;
 
-  // For round_trip, 'coordinates' should be a single point [lng, lat]
   const coordinatesPayload = [
     [startLocation.lng, startLocation.lat]
   ];
@@ -100,15 +99,14 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
     "coordinates": coordinatesPayload,
     "options": {
       "round_trip": {
-        "length": targetLengthMeters, // Target length of the round trip in meters
-        "points": 3, // Number of points ORS should generate for the loop
-        "seed": Math.floor(Math.random() * 10000) // Add randomness to ORS generation
+        "length": targetLengthMeters, 
+        "points": 3, 
+        "seed": Math.floor(Math.random() * 10000) 
       },
       "avoid_features": ["fords", "ferries"],
     },
     "preference": "recommended",
-    "geometry_simplify": "true", // Simplify geometry to reduce payload
-    // "instructions": false, // We don't need turn-by-turn instructions for display (Removed: causes error)
+    "geometry_simplify": "true", 
   };
 
   const response = await fetch(url, {
@@ -161,13 +159,17 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
 
   const distanceKm = summary.distance / 1000;
   const durationMinutes = summary.duration / 60;
-  const ascentMeters = summary.ascent; // ascent is typically in meters
+  
+  let ascentMeters: number | undefined = undefined;
+  if (summary && typeof summary.ascent === 'number' && isFinite(summary.ascent)) {
+    ascentMeters = summary.ascent;
+  }
 
   return {
     distance: distanceKm,
     estimatedTime: durationMinutes,
     coordinates: routeCoordinates,
     ascent: ascentMeters,
-    geometry: feature.geometry // Store the raw geometry as well
+    geometry: feature.geometry 
   };
 }
