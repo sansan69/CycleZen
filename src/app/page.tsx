@@ -651,7 +651,7 @@ const HomePage = () => {
               className="w-full"
             >
               {loadingRoutes ? (
-                <><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
+                <><Icons.bike className="mr-2 h-4 w-4 animate-spin" /> Generating...</>
               ) : "Generate Routes"}
             </Button>
           </CardFooter>
@@ -686,6 +686,7 @@ export default HomePage;
     
 
     
+
 
 
 
