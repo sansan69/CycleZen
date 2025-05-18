@@ -140,6 +140,8 @@ const SavedRoutesPage = () => {
               console.warn(`Saved route ${doc.id} is missing coordinate data.`);
             }
           });
+          // Explicitly sort client-side to ensure descending order by timestamp
+          routes.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
           setSavedRoutes(routes);
           setLoadingRoutes(false);
         })
@@ -587,3 +589,4 @@ const SavedRoutesPage = () => {
 };
 
 export default SavedRoutesPage;
+
