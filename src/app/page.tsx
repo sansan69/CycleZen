@@ -8,9 +8,13 @@ import type { User } from "firebase/auth";
 import {
   collection,
   addDoc,
+  doc, 
+  getDoc,
 } from "firebase/firestore";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+
 
 import { db } from "@/lib/firebase"; 
 import { 
@@ -28,7 +32,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
   Card,
@@ -191,18 +194,17 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      // Exclude geometry from saving as it can contain nested arrays not supported by Firestore
       const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
         timestamp: new Date(),
-        routeName: `Route near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
+        routeName: `Route Option ${routeIndex + 1} near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
       });
       toast({
         title: "Route Saved",
-        description: `Route saved to your profile.`,
+        description: `Route Option ${routeIndex + 1} saved to your profile.`,
       });
     } catch (error: any) {
       console.error("Error saving route:", error);
@@ -345,6 +347,7 @@ const HomePage = () => {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const router = useRouter();
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
@@ -378,7 +381,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(true); 
+        // Keep authLoading true to prevent login attempts
         return; 
     }
     
@@ -404,8 +407,24 @@ const HomePage = () => {
     console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
     setAuthLoading(true);
     try {
-      await signInWithGoogle();
-      toast({ title: "Signed In", description: "Successfully signed in with Google." });
+      const user = await signInWithGoogle();
+      if (user && db) {
+        // Check if user profile (username) exists in Firestore
+        const userDocRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(userDocRef);
+
+        if (!docSnap.exists() || !docSnap.data()?.username) {
+          toast({ title: "Welcome!", description: "Please complete your profile." });
+          router.push('/profile');
+          // setAuthLoading will be handled by onAuthUserChanged
+        } else {
+          toast({ title: "Signed In", description: "Successfully signed in with Google." });
+          // setAuthLoading will be handled by onAuthUserChanged
+        }
+      } else if (user) {
+         toast({ title: "Signed In", description: "Successfully signed in with Google." });
+      }
+      // No explicit setAuthLoading(false) here, onAuthUserChanged handles it
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
@@ -428,9 +447,9 @@ const HomePage = () => {
         4. Restart your Next.js dev server after .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
-    } finally {
-        setAuthLoading(false);
-    }
+      setAuthLoading(false); // Set authLoading false on error
+    } 
+    // Removed finally block to let onAuthUserChanged manage setAuthLoading on success
   };
 
   const handleSignOut = async () => {
