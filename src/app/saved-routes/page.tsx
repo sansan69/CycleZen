@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -10,6 +10,7 @@ import {
   getDocs,
   doc,
   deleteDoc,
+  updateDoc, // Added
   Timestamp,
 } from "firebase/firestore";
 import Link from "next/link";
@@ -26,8 +27,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, // Added
+  DialogContent, // Added
+  DialogDescription, // Added
+  DialogFooter, // Added
+  DialogHeader, // Added
+  DialogTitle, // Added
+  DialogTrigger, // Added (though we'll trigger programmatically)
+  DialogClose, // Added
+} from "@/components/ui/dialog"; // Added
 import {
   Card,
   CardContent,
@@ -37,6 +47,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; // Added
+import { Textarea } from "@/components/ui/textarea"; // Added
+import { Label } from "@/components/ui/label"; // Added
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icons } from "@/components/icons";
 import { Toaster } from "@/components/ui/toaster";
@@ -47,11 +60,12 @@ interface SavedRouteDoc {
   routeData: {
     distance: number;
     estimatedTime: number;
-    // coordinates are not typically displayed on this summary page but are available
+    ascent?: number;
   };
-  timestamp: Timestamp; // Firestore Timestamp
+  timestamp: Timestamp;
   routeName: string;
   sharedUrl: string;
+  notes?: string; // Added optional notes field
 }
 
 const SavedRoutesPage = () => {
@@ -63,6 +77,12 @@ const SavedRoutesPage = () => {
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [routeToDeleteId, setRouteToDeleteId] = useState<string | null>(null);
+
+  // State for Edit Dialog
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [routeToEdit, setRouteToEdit] = useState<SavedRouteDoc | null>(null);
+  const [editedRouteName, setEditedRouteName] = useState("");
+  const [editedRouteNotes, setEditedRouteNotes] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthUserChanged((user) => {
@@ -102,7 +122,6 @@ const SavedRoutesPage = () => {
           setLoadingRoutes(false);
         });
     } else if (!currentUser && !authLoading) {
-      // If not logged in and auth check is complete, stop loading routes
       setLoadingRoutes(false);
     }
   }, [currentUser, authLoading, toast]);
@@ -166,6 +185,62 @@ const SavedRoutesPage = () => {
     }
   };
 
+  const handleEditClick = (route: SavedRouteDoc) => {
+    setRouteToEdit(route);
+    setEditedRouteName(route.routeName);
+    setEditedRouteNotes(route.notes || "");
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!routeToEdit || !currentUser || !db) {
+      toast({
+        title: "Error",
+        description: "Could not save changes. Missing information.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!editedRouteName.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Route name cannot be empty.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const routeDocRef = doc(db, "users", currentUser.uid, "savedRoutes", routeToEdit.id);
+      await updateDoc(routeDocRef, {
+        routeName: editedRouteName.trim(),
+        notes: editedRouteNotes.trim(),
+      });
+
+      setSavedRoutes((prevRoutes) =>
+        prevRoutes.map((route) =>
+          route.id === routeToEdit.id
+            ? { ...route, routeName: editedRouteName.trim(), notes: editedRouteNotes.trim() }
+            : route
+        )
+      );
+
+      toast({
+        title: "Changes Saved",
+        description: "Your route details have been updated.",
+      });
+      setIsEditDialogOpen(false);
+      setRouteToEdit(null);
+    } catch (error) {
+      console.error("Error saving changes:", error);
+      toast({
+        title: "Save Error",
+        description: "Failed to save changes. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   if (authLoading) {
     return (
@@ -195,7 +270,7 @@ const SavedRoutesPage = () => {
     <>
       <div className="flex flex-col min-h-screen bg-secondary p-4 sm:p-6 md:p-8 font-sans">
         <Toaster />
-        <header className="w-full max-w-4xl mx-auto mb-8">
+        <header className="w-full max-w-2xl mx-auto mb-8">
           <div className="flex items-center justify-between">
               <h1 className="text-4xl font-bold text-primary">My Saved Routes</h1>
               <Button asChild variant="outline">
@@ -204,12 +279,12 @@ const SavedRoutesPage = () => {
           </div>
         </header>
 
-        <div className="container mx-auto max-w-2xl">
+        <main className="container mx-auto max-w-2xl">
           {loadingRoutes && (
             <div className="space-y-4">
-              <Skeleton className="h-[150px] w-full rounded-lg" />
-              <Skeleton className="h-[150px] w-full rounded-lg" />
-              <Skeleton className="h-[150px] w-full rounded-lg" />
+              <Skeleton className="h-[200px] w-full rounded-lg" />
+              <Skeleton className="h-[200px] w-full rounded-lg" />
+              <Skeleton className="h-[200px] w-full rounded-lg" />
             </div>
           )}
 
@@ -235,13 +310,38 @@ const SavedRoutesPage = () => {
                       Saved on: {new Date(route.timestamp.toDate()).toLocaleDateString()}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-foreground">
-                      Distance: {route.routeData.distance.toFixed(2)} km
-                    </p>
-                    <p className="text-sm text-foreground">
-                      Estimated Duration: {route.routeData.estimatedTime.toFixed(0)} min
-                    </p>
+                  <CardContent className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-2 text-sm">
+                        <div className="flex items-center">
+                            <Icons.route className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+                            <div>
+                            <p className="font-semibold text-base">{route.routeData.distance.toFixed(1)} km</p>
+                            <p className="text-xs text-muted-foreground">Distance</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center">
+                            <Icons.clock className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+                            <div>
+                            <p className="font-semibold text-base">{route.routeData.estimatedTime.toFixed(0)} min</p>
+                            <p className="text-xs text-muted-foreground">Duration</p>
+                            </div>
+                        </div>
+                         {route.routeData.ascent !== undefined && (
+                            <div className="flex items-center">
+                                <Icons.mountain className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+                                <div>
+                                <p className="font-semibold text-base">{route.routeData.ascent.toFixed(0)} m</p>
+                                <p className="text-xs text-muted-foreground">Elevation</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    {route.notes && (
+                      <div className="pt-2">
+                        <p className="text-sm font-medium text-foreground">Notes:</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{route.notes}</p>
+                      </div>
+                    )}
                   </CardContent>
                   <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
                     <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
@@ -250,6 +350,13 @@ const SavedRoutesPage = () => {
                       </a>
                     </Button>
                     <div className="flex gap-2">
+                       <Button 
+                        onClick={() => handleEditClick(route)} 
+                        variant="outline" 
+                        className="hover:bg-secondary/80"
+                      >
+                        <Icons.edit className="mr-2 h-4 w-4" /> Edit
+                      </Button>
                       <Button 
                         onClick={() => handleShareRoute(route.sharedUrl)} 
                         variant="outline" 
@@ -270,9 +377,10 @@ const SavedRoutesPage = () => {
               ))}
             </div>
           )}
-        </div>
+        </main>
       </div>
 
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -292,9 +400,55 @@ const SavedRoutesPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Route Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Route Details</DialogTitle>
+            <DialogDescription>
+              Make changes to your saved route here. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          {routeToEdit && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="routeName" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  id="routeName"
+                  value={editedRouteName}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEditedRouteName(e.target.value)}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="routeNotes" className="text-right">
+                  Notes
+                </Label>
+                <Textarea
+                  id="routeNotes"
+                  value={editedRouteNotes}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setEditedRouteNotes(e.target.value)}
+                  className="col-span-3 min-h-[100px]"
+                  placeholder="Add any notes about this route..."
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button type="button" onClick={handleSaveChanges} variant="accent">Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
 
 export default SavedRoutesPage;
 
+    
