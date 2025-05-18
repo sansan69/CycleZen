@@ -165,7 +165,8 @@ const RouteDisplay = ({
       const routeDataToSave = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, 
+        ascent: route.ascent,
+        coordinates: route.coordinates,
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -220,10 +221,33 @@ const RouteDisplay = ({
     <Card className="bg-card shadow-lg rounded-lg">
       <CardHeader>
         <CardTitle className="text-primary">Route Option</CardTitle>
-        <CardDescription className="text-muted-foreground">
-          Distance: {route.distance.toFixed(2)} km, Duration:{" "}
-          {route.estimatedTime.toFixed(0)} min
-        </CardDescription>
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-2 text-sm">
+          <div className="flex items-center">
+            <Icons.route className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-lg">{route.distance.toFixed(1)} km</p>
+              <p className="text-xs text-muted-foreground">Distance</p>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <Icons.clock className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-lg">{route.estimatedTime.toFixed(0)} min</p>
+              <p className="text-xs text-muted-foreground">Duration</p>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <Icons.mountain className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-lg">{route.ascent !== undefined ? route.ascent.toFixed(0) : 'N/A'} m</p>
+              <p className="text-xs text-muted-foreground">Elevation</p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
+          <p>Difficulty: Moderate (est.)</p>
+          <p>Route Type: Primarily Road</p>
+        </div>
       </CardHeader>
       <CardContent>
         {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && center ? (
@@ -305,11 +329,6 @@ const HomePage = () => {
     const envMessagingSenderId = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
     const envAppId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
 
-    let missingVars: string[] = [];
-    if (!envApiKey) missingVars.push("API Key");
-    if (!envProjectId) missingVars.push("Project ID");
-    if (!envAuthDomain) missingVars.push("Auth Domain");
-
     console.log("--- Firebase Config from Client Environment ---");
     console.log("NEXT_PUBLIC_FIREBASE_API_KEY:", envApiKey ? "Present" : "MISSING or Empty");
     console.log("NEXT_PUBLIC_FIREBASE_PROJECT_ID:", envProjectId ? "Present" : "MISSING or Empty");
@@ -318,6 +337,11 @@ const HomePage = () => {
     console.log("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:", envMessagingSenderId ? "Present" : "Not Set (Optional)");
     console.log("NEXT_PUBLIC_FIREBASE_APP_ID:", envAppId ? "Present" : "Not Set (Optional)");
     console.log("----------------------------------------------");
+    
+    let missingVars: string[] = [];
+    if (!envApiKey) missingVars.push("API Key");
+    if (!envProjectId) missingVars.push("Project ID");
+    if (!envAuthDomain) missingVars.push("Auth Domain");
 
     if (missingVars.length > 0) {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
@@ -361,7 +385,7 @@ const HomePage = () => {
           hostnameToAdd = new URL(currentOrigin).hostname;
         } catch(e) {
           console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-          hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
+          hostnameToAdd = currentOrigin; 
         }
         
         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 

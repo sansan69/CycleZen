@@ -34,9 +34,13 @@ export interface CyclingRoute {
    */
   coordinates: Coordinate[];
   /**
+   * The total ascent of the route in meters.
+   */
+  ascent?: number;
+  /**
    * The raw geometry string, if needed for other purposes (optional)
    */
-  geometry?: string;
+  geometry?: any; // Can be GeoJSON Geometry object
 }
 
 /**
@@ -98,12 +102,13 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
       "round_trip": {
         "length": targetLengthMeters, // Target length of the round trip in meters
         "points": 3, // Number of points ORS should generate for the loop
-        "seed": Math.floor(Math.random() * 1000) // Add randomness to ORS generation
+        "seed": Math.floor(Math.random() * 10000) // Add randomness to ORS generation
       },
       "avoid_features": ["fords", "ferries"],
     },
     "preference": "recommended",
     "geometry_simplify": "true", // Simplify geometry to reduce payload
+    // "instructions": false, // We don't need turn-by-turn instructions for display (Removed: causes error)
   };
 
   const response = await fetch(url, {
@@ -156,12 +161,13 @@ async function fetchRoute(apiKey:string, startLocation: Coordinate, targetLength
 
   const distanceKm = summary.distance / 1000;
   const durationMinutes = summary.duration / 60;
+  const ascentMeters = summary.ascent; // ascent is typically in meters
 
   return {
     distance: distanceKm,
     estimatedTime: durationMinutes,
     coordinates: routeCoordinates,
+    ascent: ascentMeters,
     geometry: feature.geometry // Store the raw geometry as well
   };
 }
-

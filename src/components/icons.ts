@@ -1,4 +1,5 @@
-import {ArrowLeft, ArrowRight, Check, ChevronsUpDown, Circle, Copy, Edit, ExternalLink, File, HelpCircle, Home, List, Loader2, Locate, Mail, MessageSquare, Moon, Plus, PlusCircle, Search, Server, Settings, Share2, Shield, Sun, Trash, User, X, Workflow, Bike} from 'lucide-react';
+
+import {ArrowLeft, ArrowRight, Check, ChevronsUpDown, Circle, Copy, Edit, ExternalLink, File, HelpCircle, Home, List, Loader2, Locate, Mail, MessageSquare, Moon, Plus, PlusCircle, Search, Server, Settings, Share2, Shield, Sun, Trash, User, Workflow, Bike, Clock, Mountain, Route, X } from 'lucide-react';
 
 const Icons = {
   arrowLeft: ArrowLeft,
@@ -7,7 +8,7 @@ const Icons = {
   chevronDown: ChevronsUpDown,
   circle: Circle,
   workflow: Workflow,
-  close: X,
+  close: X, // Ensure X is assigned here
   copy: Copy,
   edit: Edit,
   externalLink: ExternalLink,
@@ -31,6 +32,9 @@ const Icons = {
   trash: Trash,
   user: User,
   bike: Bike,
+  clock: Clock,
+  mountain: Mountain,
+  route: Route,
 };
 
 export {Icons};
