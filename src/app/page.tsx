@@ -13,6 +13,7 @@ import {
   getDoc,
   setDoc,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import {
   GoogleMap,
@@ -22,6 +23,7 @@ import {
   useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
+import html2canvas from 'html2canvas';
 
 
 import { db } from "@/lib/firebase";
@@ -89,6 +91,8 @@ const estimateCaloriesBurned = (distanceKm: number | undefined): string => {
   if (typeof distanceKm !== 'number' || !isFinite(distanceKm) || distanceKm <= 0) {
     return 'N/A';
   }
+  // Very rough estimate: ~60 calories per km for moderate cycling.
+  // This can vary wildly based on intensity, rider weight, terrain, etc.
   const calories = Math.round(distanceKm * 60);
   return calories.toLocaleString();
 };
@@ -241,13 +245,12 @@ const RouteDisplay = ({
         distance: route.distance,
         estimatedTime: route.estimatedTime,
         coordinates: route.coordinates, 
-        steps: route.steps,
+        steps: route.steps || [], // Ensure steps is an array, even if empty
       };
       
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
-      }
-      
+      }      
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -303,6 +306,9 @@ const RouteDisplay = ({
     if (userLocationMarker) { 
         setRideStartActualLocation(userLocationMarker);
     } else {
+        // If no live GPS at start, we can't accurately measure "actual" distance covered by GPS for this segment.
+        // We could use route.coordinates[0] as a fallback if we want to show *something* related to planned start.
+        // For now, if no userLocationMarker, rideStartActualLocation will be null.
         setRideStartActualLocation(null); 
     }
 
@@ -384,7 +390,7 @@ const RouteDisplay = ({
     setRideSummaryData({ 
         elapsedTime, 
         route,
-        actualDistanceCoveredKm,
+        actualDistanceCoveredKm, // This will be undefined if start/end GPS points weren't available
         estimatedCalories: estimateCaloriesBurned(actualDistanceCoveredKm ?? route.distance)
     });
     setShowRideSummaryDialog(true);
@@ -406,17 +412,22 @@ const RouteDisplay = ({
 
     try {
       const completedRidesCollection = collection(db, "users", user.uid, "completedRides");
-      const rideDataToSave = {
+      const rideDataToSave: any = {
         routeName: `Ride near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected area'} on ${new Date().toLocaleDateString()}`,
         completedAt: serverTimestamp(),
         actualDurationSeconds: rideSummaryData.elapsedTime,
         plannedDistanceKm: rideSummaryData.route.distance,
-        actualDistanceCoveredKm: rideSummaryData.actualDistanceCoveredKm,
         estimatedCalories: rideSummaryData.estimatedCalories,
-        routeCoordinates: rideSummaryData.route.coordinates,
-        ascent: rideSummaryData.route.ascent,
-        steps: rideSummaryData.route.steps, 
+        routeCoordinates: rideSummaryData.route.coordinates, // Save planned route coordinates
+        steps: rideSummaryData.route.steps || [], // Save planned steps
       };
+
+      if (rideSummaryData.actualDistanceCoveredKm !== undefined && isFinite(rideSummaryData.actualDistanceCoveredKm)) {
+        rideDataToSave.actualDistanceCoveredKm = rideSummaryData.actualDistanceCoveredKm;
+      }
+      if (rideSummaryData.route.ascent !== undefined && isFinite(rideSummaryData.route.ascent)) {
+        rideDataToSave.ascent = rideSummaryData.route.ascent;
+      }
       
       await addDoc(completedRidesCollection, rideDataToSave);
       toast({ title: "Ride Saved", description: "Your completed ride has been saved to your dashboard." });
@@ -709,6 +720,16 @@ const HomePage = () => {
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
+  const capitalizeName = (name: string | null | undefined): string => {
+    if (!name) return "";
+    return name
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+
   useEffect(() => {
     const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
     const envProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -771,14 +792,13 @@ const HomePage = () => {
             router.push('/profile');
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-            toast({ title: "Signed In", description: `Welcome back, ${userData.username || user.displayName || user.email}!`});
+            toast({ title: "Signed In", description: `Welcome back, ${capitalizeName(userData.username || user.displayName || user.email)}!`});
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
-          toast({ title: "Signed In", description: `Welcome, ${user.displayName || user.email}!`});
+          toast({ title: "Signed In", description: `Welcome, ${capitalizeName(user.displayName || user.email)}!`});
         }
       } else {
-         // signInWithGoogle might return null if popup closed by user, error handled in service
          console.warn("[handleGoogleSignIn] signInWithGoogle service returned null. This might indicate the popup was closed by the user or an issue in the service layer.");
       }
     } catch (error: any) {
@@ -902,7 +922,6 @@ const HomePage = () => {
 
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
-    // Toast is now handled by useEffect below
   }, []);
 
   useEffect(() => {
@@ -957,14 +976,6 @@ const HomePage = () => {
     }
   };
 
-  const capitalizeName = (name: string | null | undefined): string => {
-    if (!name) return "";
-    return name
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
 
   console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser, currentUser);
 
@@ -990,7 +1001,7 @@ const HomePage = () => {
         </div>
       </div>
 
-       <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8">
+      <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8">
         {authLoading ? (
           <div className="flex justify-center items-center py-2">
             <Button variant="outline" disabled className="w-full sm:w-auto">
@@ -998,7 +1009,20 @@ const HomePage = () => {
             </Button>
           </div>
         ) : currentUser ? (
-           <div className="flex justify-end w-full">
+           <div className="flex justify-between items-center w-full">
+             {/* Invisible placeholder to balance flexbox for centering the username */}
+             <div className="w-10 sm:w-12"> {/* Adjust width to match hamburger menu or desired spacing */}
+                {/* This could hold a back button or app icon in the future if needed */}
+             </div>
+
+             {/* User Name - Centered */}
+             <div className="flex-grow text-center">
+                <Link href="/profile" className="text-lg font-semibold text-primary hover:underline hover:text-primary/80 cursor-pointer">
+                  {capitalizeName(currentUser.displayName || currentUser.email)}
+                </Link>
+             </div>
+
+             {/* Hamburger Menu - Right Aligned */}
              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">
@@ -1007,14 +1031,6 @@ const HomePage = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Hi, {capitalizeName(currentUser.displayName || currentUser.email)}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/profile" className="cursor-pointer">
-                      <Icons.userCog className="mr-2 h-4 w-4" />
-                      <span>View Profile</span>
-                    </Link>
-                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/saved-routes" className="cursor-pointer">
                       <Icons.list className="mr-2 h-4 w-4" />
@@ -1029,7 +1045,7 @@ const HomePage = () => {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
-                    <Icons.user className="mr-2 h-4 w-4" /> {/* Consider a more logout-specific icon like LogOut */}
+                    <Icons.user className="mr-2 h-4 w-4" />
                     <span>Logout</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -1098,18 +1114,19 @@ const HomePage = () => {
                   value={radius}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     const value = e.target.value;
+                    // Allow only digits or empty string
                     if (value === "" || /^\d*$/.test(value)) { 
                       setRadius(value);
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") return; 
+                    if (radius === "") return; // Keep empty if user left it empty
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); 
-                      // toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
+                      setRadius(""); // Reset to empty if invalid
+                      toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
                     } else {
-                      setRadius(String(num)); 
+                      setRadius(String(num)); // Normalize valid input (e.g., "07" to "7")
                     }
                   }}
                   placeholder="5 - 100"
@@ -1195,5 +1212,6 @@ const HomePage = () => {
 export default HomePage;
 
       
+
 
 
