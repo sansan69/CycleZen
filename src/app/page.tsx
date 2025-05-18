@@ -196,9 +196,14 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      // Exclude geometry from being saved, as Firestore doesn't support nested arrays within it well.
+      
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { geometry, ...routeDataToSave } = route;
+      const { geometry, ascent, ...otherRouteProps } = route;
+      const routeDataToSave: any = { ...otherRouteProps };
+
+      if (ascent !== undefined && isFinite(ascent)) {
+        routeDataToSave.ascent = ascent;
+      }
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -215,6 +220,8 @@ const RouteDisplay = ({
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
         description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
+      } else if (error.message && error.message.toLowerCase().includes("unsupported field value: undefined")) {
+        description = "Failed to save route: The route data contains an undefined value that cannot be stored. This might be due to missing elevation data.";
       } else if (error.message) {
         description = error.message;
       }
@@ -273,7 +280,7 @@ const RouteDisplay = ({
           <div className="flex items-center">
             <Icons.mountain className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
             <div>
-              <p className="font-semibold text-lg">{route.ascent !== undefined ? route.ascent.toFixed(0) : 'N/A'} m</p>
+              <p className="font-semibold text-lg">{route.ascent !== undefined && isFinite(route.ascent) ? route.ascent.toFixed(0) : 'N/A'} m</p>
               <p className="text-xs text-muted-foreground">Elevation</p>
             </div>
           </div>
@@ -425,6 +432,8 @@ const HomePage = () => {
           const docSnap = await getDoc(userDocRef);
           const userData = docSnap.data();
           console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
+          console.log(`[handleGoogleSignIn] For new user check: !docSnap.exists() is ${!docSnap.exists()}, !userData?.username is ${!userData?.username}`);
+
 
           if (!docSnap.exists() || !userData?.username) {
             console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
@@ -433,27 +442,25 @@ const HomePage = () => {
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
             toast({ title: "Signed In", description: "Successfully signed in with Google." });
-            // onAuthUserChanged will handle setting currentUser and authLoading=false
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
-          // onAuthUserChanged will handle setting currentUser and authLoading=false
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service.");
-        setAuthLoading(false); // If sign-in fails early or returns null
+        setAuthLoading(false); 
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
       const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-      let hostnameToAdd = 'localhost'; // Default
+      let hostnameToAdd = 'localhost'; 
        try {
           const url = new URL(currentOrigin);
           hostnameToAdd = url.hostname;
         } catch(e) {
           console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-          hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
+          hostnameToAdd = currentOrigin; 
         }
 
       if (error.code === 'auth/popup-closed-by-user') {
@@ -477,9 +484,8 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-      setAuthLoading(false); // Ensure authLoading is set to false on error
+      setAuthLoading(false); 
     } 
-    // No finally block for setAuthLoading(false) here, as successful sign-in should rely on onAuthUserChanged
   };
 
   const handleSignOut = async () => {
@@ -546,7 +552,7 @@ const HomePage = () => {
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false);
         if (searchInputRef.current) {
-          searchInputRef.current.value = ''; // Clear search input
+          searchInputRef.current.value = ''; 
         }
         toast({
           title: "Routes Generated",
@@ -678,9 +684,9 @@ const HomePage = () => {
             </div>
             <div className="text-sm text-foreground text-center order-1 sm:order-2 py-1 sm:py-0">
               <Link href="/profile" passHref>
-                <span className="cursor-pointer hover:underline hover:text-primary">
+                <Button variant="link" className="text-sm text-foreground hover:text-primary p-0 h-auto">
                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
-                </span>
+                </Button>
               </Link>
             </div>
             <div className="w-full sm:w-auto order-3 sm:order-3 sm:justify-self-end">
@@ -760,9 +766,9 @@ const HomePage = () => {
                     if (radius === "") return;
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); // Reset to empty if out of range or invalid
+                      setRadius(""); 
                     } else {
-                      setRadius(String(num)); // Normalize valid number
+                      setRadius(String(num)); 
                     }
                   }}
                   placeholder="5 - 100"
@@ -871,3 +877,4 @@ const HomePage = () => {
 export default HomePage;
 
     
+
