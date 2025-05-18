@@ -204,8 +204,6 @@ const RouteDisplay = ({
         routeDataToSave.ascent = route.ascent;
       } else {
         // Firestore doesn't support undefined. If ascent is undefined, don't include it.
-        // Or, set it to a specific null-like value if your app logic requires it.
-        // For now, we just don't add the field.
       }
 
 
@@ -364,9 +362,6 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const router = useRouter();
 
-  // Route Preferences State
-  const [avoidTollways, setAvoidTollways] = useState<boolean>(false);
-  const [avoidFerries, setAvoidFerries] = useState<boolean>(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
@@ -444,20 +439,15 @@ const HomePage = () => {
             router.push('/profile');
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-            // The onAuthUserChanged listener will handle setting currentUser and authLoading.
-            // We might still show a generic sign-in success toast here.
             toast({ title: "Signed In", description: "Successfully signed in with Google." });
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
-           // onAuthUserChanged will handle the main state update.
         }
       } else {
-        // This case (user is null after successful signInWithGoogle) should ideally not happen
-        // if the service behaves as expected.
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service, but no error thrown.");
-        setAuthLoading(false); // Ensure loading state is cleared if no user and no error.
+        setAuthLoading(false); 
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -505,9 +495,7 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-    } finally {
-       // onAuthUserChanged will handle setting currentUser to null and authLoading to false.
-    }
+    } 
   };
 
   const isRadiusValid = (r: string): boolean => {
@@ -551,8 +539,7 @@ const HomePage = () => {
       }
 
       const selectedAvoidFeatures: string[] = [];
-      if (avoidTollways) selectedAvoidFeatures.push("tollways");
-      if (avoidFerries) selectedAvoidFeatures.push("ferries");
+      // Avoid features logic removed as per user request
 
       const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3, selectedAvoidFeatures);
       setRoutes(generatedRoutes);
@@ -568,7 +555,7 @@ const HomePage = () => {
       } else {
         toast({
           title: "No Routes Found",
-          description: "Could not find any cycling routes for the selected criteria. Try adjusting the distance, location or preferences.",
+          description: "Could not find any cycling routes for the selected criteria. Try adjusting the distance or location.",
           variant: "default",
         });
       }
@@ -582,7 +569,7 @@ const HomePage = () => {
     } finally {
       setLoadingRoutes(false);
     }
-  }, [selectedLocation, radius, toast, avoidTollways, avoidFerries]);
+  }, [selectedLocation, radius, toast]);
 
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
@@ -802,14 +789,7 @@ const HomePage = () => {
             <div className="grid gap-4">
               <h3 className="text-md font-medium text-foreground">Route Preferences</h3>
               <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="avoidTollways" checked={avoidTollways} onCheckedChange={(checked) => setAvoidTollways(checked as boolean)} />
-                  <Label htmlFor="avoidTollways" className="font-normal text-sm text-foreground">Avoid Tollways</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="avoidFerries" checked={avoidFerries} onCheckedChange={(checked) => setAvoidFerries(checked as boolean)} />
-                  <Label htmlFor="avoidFerries" className="font-normal text-sm text-foreground">Avoid Ferries</Label>
-                </div>
+                 {/* Route preferences removed as per user request */}
               </div>
               <p className="text-xs text-muted-foreground">
                 Note: Elevation targets and specific terrain type preferences are not available for generation. 
