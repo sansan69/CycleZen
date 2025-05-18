@@ -382,6 +382,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
+        setAuthLoading(false);
         return; 
     }
     
@@ -390,71 +391,65 @@ const HomePage = () => {
 
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false); // Auth state determined, set loading to false
+      setAuthLoading(false); 
       if (user) {
-        console.log("page.tsx onAuthUserChanged: User signed in:", user.uid, user);
+        console.log("page.tsx onAuthUserChanged: User signed in:", user.uid);
       } else {
         console.log("page.tsx onAuthUserChanged: User signed out or auth not initialized properly by service.");
       }
     });
 
     return () => unsubscribe();
-  }, [toast, router]); // router added to dependency array
+  }, [toast]); 
 
 
   const handleGoogleSignIn = async () => {
     console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
-    setAuthLoading(true); // Indicate auth process starting
+    setAuthLoading(true); 
     try {
-      const user = await signInWithGoogle(); // This is an async call from your service
+      const user = await signInWithGoogle(); 
+      console.log("[handleGoogleSignIn] signInWithGoogle service call completed. User from service:", user);
       
-      // After signInWithGoogle completes, onAuthUserChanged will fire, 
-      // setting currentUser and authLoading to false.
-      // The redirect logic for new users should ideally be triggered by onAuthUserChanged
-      // or by a state change once currentUser is set.
-
       if (user && db) {
-        // This Firestore check can run here. If it's a new user, redirect.
-        // onAuthUserChanged will still set the final auth state.
         const userDocRef = doc(db, "users", user.uid);
-        console.log(`[handleGoogleSignIn] User object from signInWithGoogle:`, user);
         console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
         const docSnap = await getDoc(userDocRef);
-        console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}`);
         const userData = docSnap.data();
-        console.log(`[handleGoogleSignIn] Firestore userData:`, userData);
+        console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
 
         if (!docSnap.exists() || !userData?.username) {
           console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
           toast({ title: "Welcome!", description: "Please complete your profile." });
           router.push('/profile');
-          // No need to setAuthLoading(false) here; onAuthUserChanged will handle it.
         } else {
           console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
           toast({ title: "Signed In", description: "Successfully signed in with Google." });
-          // No need to setAuthLoading(false) here; onAuthUserChanged will handle it.
         }
       } else if (user) {
-        // User signed in, but db might not be available or an issue occurred
         console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available OR user object was incomplete for profile check.");
         toast({ title: "Signed In", description: "Successfully signed in with Google." });
-         // No need to setAuthLoading(false) here; onAuthUserChanged will handle it.
       }
-      // If signInWithGoogle itself throws, the catch block handles setAuthLoading(false)
+      // onAuthUserChanged will set authLoading to false after currentUser is set.
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
-      let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-      let hostnameToAdd = 'localhost'; 
-      try {
-        hostnameToAdd = new URL(currentOrigin).hostname;
-      } catch(e) {
-        console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-        hostnameToAdd = currentOrigin; 
-      }
-
-      if (error.code === 'auth/unauthorized-domain') {
-         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        toast({
+          title: "Sign-in Cancelled",
+          description: "The Google login window was closed before sign-in could complete.",
+          variant: "default", 
+          duration: 5000
+        });
+      } else if (error.code === 'auth/unauthorized-domain') {
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+        let hostnameToAdd = 'localhost'; 
+        try {
+          hostnameToAdd = new URL(currentOrigin).hostname;
+        } catch(e) {
+          console.warn("Could not parse hostname from currentOrigin", currentOrigin);
+          hostnameToAdd = currentOrigin; 
+        }
+        const unauthorizedDomainDescription = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
         Current Origin: ${currentOrigin}. Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Project ID: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'Not Set'}.
         Troubleshooting:
@@ -462,9 +457,11 @@ const HomePage = () => {
         2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file matches your Firebase project's Auth Domain.
         3. Verify all NEXT_PUBLIC_FIREBASE_* vars in .env.local are correct for the project.
         4. Restart your Next.js dev server after .env.local changes.`;
+        toast({ title: "Sign-in Error: Unauthorized Domain", description: unauthorizedDomainDescription, variant: "destructive", duration: 15000 });
+      } else {
+        toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-      toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
-      setAuthLoading(false); // Ensure loading is false if the sign-in attempt fails
+      setAuthLoading(false); 
     }
   };
 
@@ -474,11 +471,10 @@ const HomePage = () => {
     try {
       await signOutUser();
       toast({ title: "Signed Out", description: "Successfully signed out." });
-      // onAuthUserChanged will set currentUser to null and authLoading to false
     } catch (error: any) {      
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-      setAuthLoading(false); // Ensure loading is false if sign-out fails
+      setAuthLoading(false); 
     }
   };
 
@@ -615,7 +611,7 @@ const HomePage = () => {
       .join(' ');
   };
 
-  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser, currentUser);
+  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser);
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
