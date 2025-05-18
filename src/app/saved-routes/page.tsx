@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, ChangeEvent } from "react";
+import { useState, useEffect, ChangeEvent, useCallback } from "react";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -10,10 +10,16 @@ import {
   getDocs,
   doc,
   deleteDoc,
-  updateDoc, // Added
+  updateDoc,
   Timestamp,
 } from "firebase/firestore";
 import Link from "next/link";
+import {
+  GoogleMap,
+  Polyline,
+  Marker,
+  useJsApiLoader,
+} from "@react-google-maps/api";
 
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/lib/firebaseAuthService";
@@ -29,15 +35,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Dialog, // Added
-  DialogContent, // Added
-  DialogDescription, // Added
-  DialogFooter, // Added
-  DialogHeader, // Added
-  DialogTitle, // Added
-  DialogTrigger, // Added (though we'll trigger programmatically)
-  DialogClose, // Added
-} from "@/components/ui/dialog"; // Added
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -47,26 +52,41 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input"; // Added
-import { Textarea } from "@/components/ui/textarea"; // Added
-import { Label } from "@/components/ui/label"; // Added
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icons } from "@/components/icons";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
+// Define Coordinate and SavedRouteData interfaces locally for this page
+interface Coordinate {
+  lat: number;
+  lng: number;
+}
+
+interface SavedRouteData {
+  distance: number;
+  estimatedTime: number;
+  ascent?: number;
+  coordinates: Coordinate[]; // Ensure coordinates are part of the type
+}
+
 interface SavedRouteDoc {
   id: string;
-  routeData: {
-    distance: number;
-    estimatedTime: number;
-    ascent?: number;
-  };
+  routeData: SavedRouteData;
   timestamp: Timestamp;
   routeName: string;
   sharedUrl: string;
-  notes?: string; // Added optional notes field
+  notes?: string;
 }
+
+const GOOGLE_MAPS_LIBRARIES = ["places", "geometry"] as (
+  | "places"
+  | "geometry"
+)[];
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 const SavedRoutesPage = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -78,11 +98,16 @@ const SavedRoutesPage = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [routeToDeleteId, setRouteToDeleteId] = useState<string | null>(null);
 
-  // State for Edit Dialog
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [routeToEdit, setRouteToEdit] = useState<SavedRouteDoc | null>(null);
   const [editedRouteName, setEditedRouteName] = useState("");
   const [editedRouteNotes, setEditedRouteNotes] = useState("");
+
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-saved-routes-script",
+    googleMapsApiKey: googleMapsApiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthUserChanged((user) => {
@@ -107,7 +132,13 @@ const SavedRoutesPage = () => {
         .then((querySnapshot) => {
           const routes: SavedRouteDoc[] = [];
           querySnapshot.forEach((doc) => {
-            routes.push({ id: doc.id, ...doc.data() } as SavedRouteDoc);
+            // Ensure routeData.coordinates exists before pushing
+            const data = doc.data();
+            if (data.routeData && data.routeData.coordinates) {
+              routes.push({ id: doc.id, ...data } as SavedRouteDoc);
+            } else {
+              console.warn(`Saved route ${doc.id} is missing coordinate data.`);
+            }
           });
           setSavedRoutes(routes);
           setLoadingRoutes(false);
@@ -161,7 +192,13 @@ const SavedRoutesPage = () => {
     }
 
     try {
-      const routeDocRef = doc(db, "users", currentUser.uid, "savedRoutes", routeToDeleteId);
+      const routeDocRef = doc(
+        db,
+        "users",
+        currentUser.uid,
+        "savedRoutes",
+        routeToDeleteId
+      );
       await deleteDoc(routeDocRef);
 
       setSavedRoutes((prevRoutes) =>
@@ -211,7 +248,13 @@ const SavedRoutesPage = () => {
     }
 
     try {
-      const routeDocRef = doc(db, "users", currentUser.uid, "savedRoutes", routeToEdit.id);
+      const routeDocRef = doc(
+        db,
+        "users",
+        currentUser.uid,
+        "savedRoutes",
+        routeToEdit.id
+      );
       await updateDoc(routeDocRef, {
         routeName: editedRouteName.trim(),
         notes: editedRouteNotes.trim(),
@@ -220,7 +263,11 @@ const SavedRoutesPage = () => {
       setSavedRoutes((prevRoutes) =>
         prevRoutes.map((route) =>
           route.id === routeToEdit.id
-            ? { ...route, routeName: editedRouteName.trim(), notes: editedRouteNotes.trim() }
+            ? {
+                ...route,
+                routeName: editedRouteName.trim(),
+                notes: editedRouteNotes.trim(),
+              }
             : route
         )
       );
@@ -241,6 +288,20 @@ const SavedRoutesPage = () => {
     }
   };
 
+  const onMapLoad = useCallback((map: google.maps.Map, coordinates: Coordinate[]) => {
+    if (coordinates && coordinates.length > 0 && google.maps.LatLngBounds) {
+      const bounds = new google.maps.LatLngBounds();
+      coordinates.forEach((coord) => {
+        bounds.extend(new google.maps.LatLng(coord.lat, coord.lng));
+      });
+      map.fitBounds(bounds);
+    }
+  }, []);
+
+  const mapContainerStyle = {
+    height: "250px",
+    width: "100%",
+  };
 
   if (authLoading) {
     return (
@@ -259,7 +320,10 @@ const SavedRoutesPage = () => {
         <p className="text-lg text-muted-foreground mb-6">
           Please log in to view your saved routes.
         </p>
-        <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
+        <Button
+          asChild
+          className="bg-accent text-accent-foreground hover:bg-accent/90"
+        >
           <Link href="/">Return to Home & Login</Link>
         </Button>
       </div>
@@ -272,19 +336,20 @@ const SavedRoutesPage = () => {
         <Toaster />
         <header className="w-full max-w-2xl mx-auto mb-8">
           <div className="flex items-center justify-between">
-              <h1 className="text-4xl font-bold text-primary">My Saved Routes</h1>
-              <Button asChild variant="outline">
-                <Link href="/"><Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Home</Link>
-              </Button>
+            <h1 className="text-4xl font-bold text-primary">My Saved Routes</h1>
+            <Button asChild variant="outline">
+              <Link href="/">
+                <Icons.arrowLeft className="mr-2 h-4 w-4" /> Back to Home
+              </Link>
+            </Button>
           </div>
         </header>
 
         <main className="container mx-auto max-w-2xl">
           {loadingRoutes && (
             <div className="space-y-4">
-              <Skeleton className="h-[200px] w-full rounded-lg" />
-              <Skeleton className="h-[200px] w-full rounded-lg" />
-              <Skeleton className="h-[200px] w-full rounded-lg" />
+              <Skeleton className="h-[350px] w-full rounded-lg" />
+              <Skeleton className="h-[350px] w-full rounded-lg" />
             </div>
           )}
 
@@ -305,68 +370,127 @@ const SavedRoutesPage = () => {
               {savedRoutes.map((route) => (
                 <Card key={route.id} className="bg-card shadow-lg rounded-lg">
                   <CardHeader>
-                    <CardTitle className="text-primary">{route.routeName}</CardTitle>
+                    <CardTitle className="text-primary">
+                      {route.routeName}
+                    </CardTitle>
                     <CardDescription className="text-muted-foreground">
-                      Saved on: {new Date(route.timestamp.toDate()).toLocaleDateString()}
+                      Saved on:{" "}
+                      {new Date(route.timestamp.toDate()).toLocaleDateString()}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-2">
+                  <CardContent className="space-y-4"> {/* Added space-y-4 for map */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-2 text-sm">
-                        <div className="flex items-center">
-                            <Icons.route className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
-                            <div>
-                            <p className="font-semibold text-base">{route.routeData.distance.toFixed(1)} km</p>
-                            <p className="text-xs text-muted-foreground">Distance</p>
-                            </div>
+                      <div className="flex items-center">
+                        <Icons.route className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold text-base">
+                            {route.routeData.distance.toFixed(1)} km
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Distance
+                          </p>
                         </div>
-                        <div className="flex items-center">
-                            <Icons.clock className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
-                            <div>
-                            <p className="font-semibold text-base">{route.routeData.estimatedTime.toFixed(0)} min</p>
-                            <p className="text-xs text-muted-foreground">Duration</p>
-                            </div>
+                      </div>
+                      <div className="flex items-center">
+                        <Icons.clock className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold text-base">
+                            {route.routeData.estimatedTime.toFixed(0)} min
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Duration
+                          </p>
                         </div>
-                         {route.routeData.ascent !== undefined && (
-                            <div className="flex items-center">
-                                <Icons.mountain className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
-                                <div>
-                                <p className="font-semibold text-base">{route.routeData.ascent.toFixed(0)} m</p>
-                                <p className="text-xs text-muted-foreground">Elevation</p>
-                                </div>
-                            </div>
-                        )}
+                      </div>
+                      {route.routeData.ascent !== undefined && isFinite(route.routeData.ascent) && (
+                        <div className="flex items-center">
+                          <Icons.mountain className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
+                          <div>
+                            <p className="font-semibold text-base">
+                              {route.routeData.ascent.toFixed(0)} m
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Elevation
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
+
+                    {isLoaded && googleMapsApiKey && route.routeData.coordinates && route.routeData.coordinates.length > 0 ? (
+                      <div className="rounded-md overflow-hidden border border-border mt-2">
+                        <GoogleMap
+                          mapContainerStyle={mapContainerStyle}
+                          options={{
+                            streetViewControl: false,
+                            mapTypeControl: false,
+                            fullscreenControl: true,
+                            gestureHandling: 'cooperative' // Good for scrollable pages
+                          }}
+                          onLoad={(map) => onMapLoad(map, route.routeData.coordinates)}
+                        >
+                          <Polyline
+                            path={route.routeData.coordinates}
+                            options={{
+                              strokeColor: "hsl(var(--primary))",
+                              strokeWeight: 3,
+                              strokeOpacity: 0.8,
+                            }}
+                          />
+                          <Marker position={route.routeData.coordinates[0]} />
+                        </GoogleMap>
+                      </div>
+                    ) : loadError ? (
+                       <p className="text-sm text-destructive">Map could not be loaded.</p>
+                    ) : (
+                      <Skeleton className="h-[250px] w-full bg-muted mt-2" />
+                    )}
+
+
                     {route.notes && (
                       <div className="pt-2">
-                        <p className="text-sm font-medium text-foreground">Notes:</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{route.notes}</p>
+                        <p className="text-sm font-medium text-foreground">
+                          Notes:
+                        </p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {route.notes}
+                        </p>
                       </div>
                     )}
                   </CardContent>
                   <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
-                    <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
-                      <a href={route.sharedUrl} target="_blank" rel="noopener noreferrer">
-                        <Icons.externalLink className="mr-2 h-4 w-4" /> Open in Google Maps
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="border-accent text-accent hover:bg-accent/10"
+                    >
+                      <a
+                        href={route.sharedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Icons.externalLink className="mr-2 h-4 w-4" /> Open
+                        in Google Maps
                       </a>
                     </Button>
                     <div className="flex gap-2">
-                       <Button 
-                        onClick={() => handleEditClick(route)} 
-                        variant="outline" 
+                      <Button
+                        onClick={() => handleEditClick(route)}
+                        variant="outline"
                         className="hover:bg-secondary/80"
                       >
                         <Icons.edit className="mr-2 h-4 w-4" /> Edit
                       </Button>
-                      <Button 
-                        onClick={() => handleShareRoute(route.sharedUrl)} 
-                        variant="outline" 
+                      <Button
+                        onClick={() => handleShareRoute(route.sharedUrl)}
+                        variant="outline"
                         className="hover:bg-secondary/80"
                       >
                         <Icons.share className="mr-2 h-4 w-4" /> Share
                       </Button>
-                       <Button 
-                        onClick={() => handleDeleteClick(route.id)} 
-                        variant="destructive" 
+                      <Button
+                        onClick={() => handleDeleteClick(route.id)}
+                        variant="destructive"
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         <Icons.trash className="mr-2 h-4 w-4" /> Delete
@@ -380,17 +504,22 @@ const SavedRoutesPage = () => {
         </main>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete this saved route.
+              This action cannot be undone. This will permanently delete this
+              saved route.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setRouteToDeleteId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setRouteToDeleteId(null)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -401,13 +530,13 @@ const SavedRoutesPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Route Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Route Details</DialogTitle>
             <DialogDescription>
-              Make changes to your saved route here. Click save when you're done.
+              Make changes to your saved route here. Click save when you're
+              done.
             </DialogDescription>
           </DialogHeader>
           {routeToEdit && (
@@ -419,7 +548,9 @@ const SavedRoutesPage = () => {
                 <Input
                   id="routeName"
                   value={editedRouteName}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEditedRouteName(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setEditedRouteName(e.target.value)
+                  }
                   className="col-span-3"
                 />
               </div>
@@ -430,7 +561,9 @@ const SavedRoutesPage = () => {
                 <Textarea
                   id="routeNotes"
                   value={editedRouteNotes}
-                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setEditedRouteNotes(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                    setEditedRouteNotes(e.target.value)
+                  }
                   className="col-span-3 min-h-[100px]"
                   placeholder="Add any notes about this route..."
                 />
@@ -439,9 +572,13 @@ const SavedRoutesPage = () => {
           )}
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline">Cancel</Button>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
             </DialogClose>
-            <Button type="button" onClick={handleSaveChanges} variant="accent">Save Changes</Button>
+            <Button type="button" onClick={handleSaveChanges} variant="accent">
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -450,5 +587,3 @@ const SavedRoutesPage = () => {
 };
 
 export default SavedRoutesPage;
-
-    
