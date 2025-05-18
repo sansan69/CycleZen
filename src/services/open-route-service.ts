@@ -49,14 +49,12 @@ export interface CyclingRoute {
  * @param location The starting location for the routes.
  * @param radius The radius in kilometers which influences the target length of the routes.
  * @param numberOfRoutes The number of routes to generate. Defaults to 3.
- * @param avoidFeatures An optional array of features to avoid.
  * @returns A promise that resolves to an array of CyclingRoute objects.
  */
 export async function getCyclingRoutes(
   location: Coordinate,
   radius: number, // This radius is used for round_trip.length
-  numberOfRoutes: number = 3,
-  avoidFeatures?: string[] // Changed from mandatory to optional
+  numberOfRoutes: number = 3
 ): Promise<CyclingRoute[]> {
   const apiKey = process.env.NEXT_PUBLIC_OPEN_ROUTE_SERVICE_API_KEY;
 
@@ -72,7 +70,7 @@ export async function getCyclingRoutes(
     let route: CyclingRoute | null = null;
     for (let tryCount = 0; tryCount < maxTriesPerRoute; tryCount++) {
       try {
-        route = await fetchRoute(apiKey, location, radius * 1000, avoidFeatures); 
+        route = await fetchRoute(apiKey, location, radius * 1000); 
         if (route) {
           cyclingRoutes.push(route);
           break; 
@@ -91,8 +89,7 @@ export async function getCyclingRoutes(
 async function fetchRoute(
   apiKey:string, 
   startLocation: Coordinate, 
-  targetLengthMeters: number,
-  avoidFeatures?: string[] // Parameter added
+  targetLengthMeters: number
 ): Promise<CyclingRoute> {
   const profile = "cycling-regular";
   const url = `https://api.openrouteservice.org/v2/directions/${profile}/geojson`;
@@ -109,15 +106,10 @@ async function fetchRoute(
     }
   };
 
-  // Add avoid_features to options if provided
-  if (avoidFeatures && avoidFeatures.length > 0) {
-    options["avoid_features"] = avoidFeatures;
-  }
-
   const body = {
     "coordinates": coordinatesPayload,
     "options": options,
-    "preference": "recommended", // Moved preference to top-level
+    "preference": "recommended",
     "geometry_simplify": "true", 
   };
 

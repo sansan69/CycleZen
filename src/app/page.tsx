@@ -13,6 +13,15 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import {
+  GoogleMap,
+  Polyline,
+  Marker,
+  Autocomplete,
+  useJsApiLoader,
+  Circle,
+} from "@react-google-maps/api";
+
 
 import { db } from "@/lib/firebase";
 import {
@@ -22,7 +31,6 @@ import {
 } from "@/lib/firebaseAuthService";
 import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
 
-import GoogleMapComponent from "@/components/google-map";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,16 +58,11 @@ import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
+import GoogleMapComponent from "@/components/google-map";
 
-import {
-  GoogleMap,
-  Polyline,
-  Autocomplete,
-  useJsApiLoader,
-  Marker,
-} from "@react-google-maps/api";
 
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 const RouteDisplay = ({
   route,
@@ -197,13 +200,17 @@ const RouteDisplay = ({
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       
+      // Exclude geometry when saving
       const { geometry, ...otherRouteProps } = route;
       const routeDataToSave: any = { ...otherRouteProps };
 
+      // Ensure ascent is a finite number or not included
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       } else {
-        // Firestore doesn't support undefined. If ascent is undefined, don't include it.
+        // Firestore doesn't support undefined. If ascent is undefined or non-finite, don't include it.
+        // Or, you could save it as null or a specific placeholder if you prefer.
+        // For now, we'll just omit it if it's not a valid number.
       }
 
 
@@ -221,9 +228,9 @@ const RouteDisplay = ({
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). This might be due to the 'geometry' field which has been excluded; however, please check other fields.";
       } else if (error.message && error.message.toLowerCase().includes("unsupported field value: undefined")) {
-        description = "Failed to save route: The route data contains an undefined value that cannot be stored. This might be due to missing elevation data.";
+         description = "Failed to save route: The route data contains an undefined value (likely 'ascent') that cannot be stored.";
       } else if (error.message) {
         description = error.message;
       }
@@ -293,7 +300,7 @@ const RouteDisplay = ({
         </div>
       </CardHeader>
       <CardContent>
-        {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
+        {googleMapsApiKey ? (
           <div className="rounded-md overflow-hidden border border-border">
             <GoogleMap
               mapContainerStyle={mapStyles}
@@ -345,7 +352,6 @@ const RouteDisplay = ({
   );
 };
 
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 const HomePage = () => {
   const [radius, setRadius] = useState<string>("5");
@@ -446,8 +452,12 @@ const HomePage = () => {
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
         }
       } else {
-        console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service, but no error thrown.");
-        setAuthLoading(false); 
+        // This case means signInWithGoogle resolved to null, which can happen if the user closes the popup
+        // or if there's an issue not caught as an exception by the service.
+        // The service itself logs `auth/popup-closed-by-user` before throwing or returning null.
+        // So, we may not need to handle popup-closed-by-user specifically here if the service does.
+        console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
+        setAuthLoading(false); // Ensure auth loading is false if no user and no explicit error thrown here
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -496,6 +506,7 @@ const HomePage = () => {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
     } 
+    // setAuthLoading(false) will be handled by onAuthUserChanged
   };
 
   const isRadiusValid = (r: string): boolean => {
@@ -538,10 +549,7 @@ const HomePage = () => {
         return;
       }
 
-      const selectedAvoidFeatures: string[] = [];
-      // Avoid features logic removed as per user request
-
-      const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3, selectedAvoidFeatures);
+      const generatedRoutes = await getCyclingRoutes(selectedLocation, numericRadius, 3);
       setRoutes(generatedRoutes);
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false);
@@ -704,7 +712,7 @@ const HomePage = () => {
           <CardHeader>
             <CardTitle className="text-2xl text-primary">Route Generation</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Select a starting point, target distance, and preferences to find your next ride.
+              Select a starting point and target distance to find your next ride.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6">
@@ -786,16 +794,10 @@ const HomePage = () => {
               </p>
             </div>
             
-            <div className="grid gap-4">
-              <h3 className="text-md font-medium text-foreground">Route Preferences</h3>
-              <div className="space-y-3">
-                 {/* Route preferences removed as per user request */}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Note: Elevation targets and specific terrain type preferences are not available for generation. 
-                Elevation gain will be shown in generated route details.
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Note: Elevation targets and specific terrain type preferences are not available for generation. 
+              Elevation gain will be shown in generated route details.
+            </p>
 
 
             {showMapInput && (
