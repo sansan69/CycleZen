@@ -12,9 +12,9 @@ interface GoogleMapComponentProps {
   onLocationSelected: (location: Coordinate) => void;
   googleMapsApiKey: string;
   searchRadiusKm?: number | null;
-  isLoaded: boolean; // Loaded state from useJsApiLoader in parent
-  loadError?: Error | null; // Load error from useJsApiLoader in parent
-  initialLocation?: Coordinate | null; // Location from parent (e.g., search or saved)
+  isLoaded: boolean;
+  loadError?: Error | null;
+  initialLocation?: Coordinate | null;
 }
 
 const defaultCenter: Coordinate = {
@@ -22,16 +22,14 @@ const defaultCenter: Coordinate = {
   lng: -118.243683,
 };
 
-// Static const for libraries, moved here as per previous fixes
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
-
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
   googleMapsApiKey,
   searchRadiusKm,
-  isLoaded, // Prop from HomePage
-  loadError, // Prop from HomePage
+  isLoaded,
+  loadError,
   initialLocation,
 }) => {
   const [mapCenter, setMapCenter] = useState<Coordinate | null>(null);
@@ -40,6 +38,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const [internalError, setInternalError] = useState<string | null>(null);
   const { toast } = useToast();
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [mapReloadKey, setMapReloadKey] = useState(0);
+
 
   const mapOptions = {
     disableDefaultUI: true,
@@ -72,20 +72,17 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       if (showProcessMessages) toast({ title: "API Key Missing", description: msg, variant: "destructive" });
       setMapCenter(defaultCenter);
       setMarkerPosition(defaultCenter);
-      console.log('[getLocation] API Key Missing: Setting internalLoading to false.');
       setInternalLoading(false);
       return;
     }
 
     if (!isLoaded) {
-       // This case should ideally be handled by the parent 'isLoaded' prop check before calling map component logic
       const msg = "Google Maps API not loaded yet.";
       console.warn('[getLocation] Attempted to get location before Google Maps API is loaded.');
       setInternalError(msg);
       if (showProcessMessages) toast({ title: "Map Not Ready", description: msg, variant: "default" });
       setMapCenter(defaultCenter);
       setMarkerPosition(defaultCenter);
-      console.log('[getLocation] Maps API not loaded: Setting internalLoading to false.');
       setInternalLoading(false);
       return;
     }
@@ -96,7 +93,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       if (showProcessMessages) toast({ title: "Map Load Error", description: msg, variant: "destructive" });
       setMapCenter(defaultCenter);
       setMarkerPosition(defaultCenter);
-      console.log('[getLocation] Maps API loadError: Setting internalLoading to false.');
       setInternalLoading(false);
       return;
     }
@@ -108,7 +104,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       if (showProcessMessages) toast({ title: "Geolocation Error", description: msg, variant: "destructive" });
       setMapCenter(defaultCenter);
       setMarkerPosition(defaultCenter);
-      console.log('[getLocation] Geolocation not supported: Setting internalLoading to false.');
       setInternalLoading(false);
       return;
     }
@@ -123,7 +118,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           if (showProcessMessages) toast({ title: "Location Permission Denied", description: msg, variant: "destructive" });
           setMapCenter(defaultCenter);
           setMarkerPosition(defaultCenter);
-          console.log('[getLocation] Geolocation permission denied: Setting internalLoading to false.');
           setInternalLoading(false);
           return;
         } else if (permissionStatus.state === 'prompt' && showProcessMessages) {
@@ -137,7 +131,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     try {
       console.log('[getLocation] Attempting navigator.geolocation.getCurrentPosition...');
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
       });
       const { latitude, longitude } = position.coords;
       const fetchedLocation = { lat: latitude, lng: longitude };
@@ -146,65 +140,71 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       setMapCenter(fetchedLocation);
       setMarkerPosition(fetchedLocation);
 
-      if (showProcessMessages || !initialLocation) {
-        onLocationSelected(fetchedLocation); 
+      if (showProcessMessages) { // only call onLocationSelected if initiated by user action (button click)
+         onLocationSelected(fetchedLocation);
+         toast({ title: "Location Updated", description: "Starting point set to your current location."});
+      } else if (!initialLocation) { // or if it's the very first automatic fetch and no initialLocation was provided
+         onLocationSelected(fetchedLocation);
       }
+
     } catch (err: any) {
       console.error('[getLocation] Error from getCurrentPosition:', err.code, err.message);
-      setInternalError(err.message || 'Failed to retrieve location.');
       let toastTitle = "Location Error";
       let toastDescription = "Could not retrieve your location. Please select manually or check settings.";
       if (err.code === 1) { toastTitle = "Location Access Denied"; toastDescription = "Please enable location permission in browser/OS settings to use this feature."; }
       else if (err.code === 2) { toastTitle = "Location Services Off?"; toastDescription = "Could not retrieve location. Please ensure device GPS/location services are turned on."; }
       else if (err.code === 3) { toastTitle = "Location Timeout"; toastDescription = "Could not get location in time. Ensure GPS/location services are on and try again."; }
       else if (err.message?.toLowerCase().includes("permissions policy")) { toastTitle = "Location Permission Blocked"; toastDescription = "Geolocation is disabled by a permissions policy. Check browser/OS settings.";}
-
+      
+      setInternalError(err.message || 'Failed to retrieve location.');
       if (showProcessMessages) toast({ title: toastTitle, description: toastDescription, variant: "destructive" });
       
-      // Fallback to default center if no location has been established yet
-      if (!mapCenter && !markerPosition) { // Check current state, not just props
-          console.log('[getLocation] Error path: Setting map to defaultCenter as no location was established.');
+      if (!mapCenter && !markerPosition) {
           setMarkerPosition(defaultCenter);
           setMapCenter(defaultCenter);
       }
     } finally {
-      console.log('[getLocation] Finally block. Setting internalLoading to false. Previous state:', internalLoading);
       setInternalLoading(false);
     }
-  }, [toast, googleMapsApiKey, isLoaded, loadError, onLocationSelected, initialLocation]); // initialLocation re-added as it's used in onLocationSelected condition
+  }, [toast, googleMapsApiKey, isLoaded, loadError, onLocationSelected, initialLocation]);
 
-  // Effect to handle when initialLocation prop is provided or changes
   useEffect(() => {
     if (initialLocation) {
       console.log('[GoogleMapComponent] useEffect [initialLocation]: Received new initialLocation prop.', initialLocation);
       setMapCenter(initialLocation);
       setMarkerPosition(initialLocation);
-      if (internalLoading) { // Only set internalLoading to false if it was true
-         console.log('[GoogleMapComponent] useEffect [initialLocation]: Setting internalLoading to false.');
+      setMapReloadKey(prev => prev + 1); // Force map re-render on external location change
+      if (internalLoading) {
          setInternalLoading(false);
       }
       setInternalError(null);
-    } else {
-      console.log('[GoogleMapComponent] useEffect [initialLocation]: initialLocation prop is null/undefined.');
     }
-  }, [initialLocation]);
+  }, [initialLocation, internalLoading]); // Removed internalLoading from dependency to avoid potential loops if it's set elsewhere
 
-  // Effect to attempt self-fetching location if no initialLocation is provided
-  // and the map is ready (isLoaded from parent is true).
   useEffect(() => {
-    console.log('[GoogleMapComponent] useEffect [self-fetch check]: Evaluating conditions.', { initialLocation, isLoaded, loadError, mapCenter, internalLoading: internalLoading });
-    // Only attempt to self-fetch if:
-    // 1. No initialLocation is *currently* provided by the parent.
-    // 2. The Google Maps API is loaded and there's no load error from parent.
-    // 3. We haven't already successfully set a mapCenter (either from prop or previous self-fetch).
-    // 4. We are currently in the internalLoading state (meaning we haven't resolved a location yet from self-fetch).
+    console.log('[GoogleMapComponent] useEffect [self-fetch check]: Evaluating conditions.', { initialLocation, isLoaded, loadError, mapCenter, internalLoading });
     if (!initialLocation && isLoaded && !loadError && !mapCenter && internalLoading) {
       console.log('[GoogleMapComponent] useEffect [self-fetch check]: Conditions met. Calling getLocation(false).');
-      getLocation(false); // getLocation will setInternalLoading(false) on completion/error
+      getLocation(false);
+    } else if (isLoaded && !loadError && internalLoading && !mapCenter && !initialLocation) {
+      // If API is loaded, no error, still loading internally, but no location yet. Fallback after a delay.
+      console.log('[GoogleMapComponent] useEffect [self-fetch check]: Fallback to default if still loading without location.');
+      setMapCenter(defaultCenter);
+      setMarkerPosition(defaultCenter);
+      setInternalLoading(false);
+    } else if (isLoaded && internalLoading && initialLocation && (!mapCenter || !markerPosition)) {
+      // This ensures that if initialLocation is provided and map is loaded, internal state reflects it
+      setMapCenter(initialLocation);
+      setMarkerPosition(initialLocation);
+      setInternalLoading(false);
+    } else if (isLoaded && !initialLocation && internalLoading) {
+        // If map is loaded, no initial location, and still internal loading, try to fetch.
+        getLocation(false);
     }
-  }, [initialLocation, isLoaded, loadError, mapCenter, internalLoading, getLocation]);
 
-  // Effect to handle API load errors from parent, if no location has been established yet
+  }, [initialLocation, isLoaded, loadError, mapCenter, internalLoading, getLocation, markerPosition]);
+
+
   useEffect(() => {
     if (loadError && !mapCenter && !markerPosition) { 
       console.error('[GoogleMapComponent] useEffect [loadError from parent]: API loadError from parent and no location established. Setting defaults and internalLoading to false.', loadError);
@@ -219,7 +219,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     console.log('[GoogleMapComponent] onMapLoad: Map instance loaded.');
-     // Initial fit an zoom is handled by the useEffect for markerPosition/searchRadiusKm
   }, []);
 
   const handleMapClick = useCallback((event: google.maps.MapMouseEvent) => {
@@ -240,19 +239,18 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     }
   }, [onLocationSelected]);
 
-  // Effect to fit map bounds to circle or pan to location
   useEffect(() => {
     if (!isLoaded || !mapRef.current || loadError || !mapCenter) {
       console.log('[GoogleMapComponent] useEffect [fitBounds]: Skipping fitBounds due to conditions.', { isLoaded, mapRefCurrent: !!mapRef.current, loadError, mapCenter });
       return;
     }
     const map = mapRef.current;
-    const targetPosition = markerPosition || mapCenter;
+    const targetPositionForBounds = markerPosition || mapCenter;
 
-    console.log('[GoogleMapComponent] useEffect [fitBounds]: Running with targetPosition:', targetPosition, 'searchRadiusKm:', searchRadiusKm);
+    console.log('[GoogleMapComponent] useEffect [fitBounds]: Running with targetPositionForBounds:', targetPositionForBounds, 'searchRadiusKm:', searchRadiusKm);
 
-    if (targetPosition && searchRadiusKm && searchRadiusKm > 0 && google.maps.geometry) {
-      const centerLatLng = new google.maps.LatLng(targetPosition.lat, targetPosition.lng);
+    if (targetPositionForBounds && searchRadiusKm && searchRadiusKm > 0 && typeof google !== 'undefined' && google.maps && google.maps.geometry && google.maps.geometry.spherical) {
+      const centerLatLng = new google.maps.LatLng(targetPositionForBounds.lat, targetPositionForBounds.lng);
       const radiusInMeters = searchRadiusKm * 1000;
       try {
         const neBoundPoint = google.maps.geometry.spherical.computeOffset(centerLatLng, radiusInMeters * Math.sqrt(2), 45);
@@ -265,23 +263,22 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           map.fitBounds(bounds);
         } else {
           console.warn('[GoogleMapComponent] useEffect [fitBounds]: Could not compute bounds, panning instead.');
-          map.panTo(targetPosition);
+          map.panTo(targetPositionForBounds);
           if ((map.getZoom() ?? 0) < 10 || (map.getZoom() ?? 0) > 15) map.setZoom(13);
         }
       } catch (e) {
         console.error("[GoogleMapComponent] useEffect [fitBounds]: Error calculating map bounds:", e);
-        map.panTo(targetPosition);
+        map.panTo(targetPositionForBounds);
         if ((map.getZoom() ?? 0) < 10 || (map.getZoom() ?? 0) > 15) map.setZoom(13);
       }
-    } else if (targetPosition) { 
-      console.log('[GoogleMapComponent] useEffect [fitBounds]: No searchRadiusKm, panning to targetPosition.');
-      map.panTo(targetPosition); 
+    } else if (targetPositionForBounds) { 
+      console.log('[GoogleMapComponent] useEffect [fitBounds]: No searchRadiusKm, panning to targetPositionForBounds.');
+      map.panTo(targetPositionForBounds); 
       if ((map.getZoom() ?? 0) < 10 || (map.getZoom() ?? 0) > 15) map.setZoom(13);
     }
   }, [markerPosition, searchRadiusKm, isLoaded, loadError, mapCenter]);
 
 
-  // Logging state just before return for diagnostics
   console.log('[GoogleMapComponent Render States]', {
     props_isLoaded: isLoaded,
     props_loadError: loadError,
@@ -290,12 +287,10 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     state_internalError: internalError,
     state_mapCenter: mapCenter,
     state_markerPosition: markerPosition,
+    map_reload_key: mapReloadKey,
   });
 
 
-  // --- Render Logic ---
-
-  // 1. API Load Error (from parent)
   if (loadError) {
     console.log('[GoogleMapComponent Render] Rendering: API Load Error Message');
     return (
@@ -306,7 +301,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  // 2. API Key missing (checked early)
   if (!isLoaded && !loadError && !googleMapsApiKey) {
     console.log('[GoogleMapComponent Render] Rendering: API Key Missing Message');
     return (
@@ -317,11 +311,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  // 3. Component is internally figuring out its location or waiting for API script
-  // This is the key message we are trying to get past.
-  // It should show if internalLoading is true AND we don't have a location yet AND no internal error.
   if (internalLoading && !markerPosition && !internalError && !mapCenter) {
-    console.log('[GoogleMapComponent Render] Rendering: "Detecting location and initializing map..."');
+    console.log('[GoogleMapComponent Render] Rendering: "Detecting location and initializing map..." because internalLoading AND no marker/error/mapCenter');
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
@@ -330,10 +321,8 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  // 4. Google Maps API Script is still loading (isLoaded from parent is false)
-  // AND we haven't hit the specific "internalLoading" state above (e.g. if mapCenter got set to default quickly)
   if (!isLoaded && !loadError) {
-    console.log('[GoogleMapComponent Render] Rendering: "Map is initializing..."');
+    console.log('[GoogleMapComponent Render] Rendering: "Map is initializing..." because !isLoaded from parent');
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md text-center p-4">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
@@ -351,6 +340,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       {isLoaded && displayCenter ? (
         <>
           <GoogleMap
+            key={mapReloadKey} // Add key here
             mapContainerStyle={{ width: '100%', height: '100%' }}
             center={displayCenter}
             zoom={(mapRef.current?.getZoom() && (mapRef.current.getZoom() ?? 0) > 3) ? undefined : 12} 
@@ -367,7 +357,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             )}
             {markerPosition && searchRadiusKm && searchRadiusKm > 0 && (
               <Circle
-                key={`${markerPosition.lat}-${markerPosition.lng}-${searchRadiusKm}`}
+                key={markerPosition ? `${markerPosition.lat}-${markerPosition.lng}-${searchRadiusKm}` : String(searchRadiusKm ?? 'defaultRadiusKey')}
                 center={markerPosition}
                 radius={searchRadiusKm * 1000}
                 options={circleOptions}
@@ -391,7 +381,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           </Button>
         </>
       ) : (
-        // Fallback if somehow isLoaded is false here, or displayCenter is null (should be caught by earlier conditions)
         <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
           <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
           <p className="text-foreground">Initializing map view...</p>
