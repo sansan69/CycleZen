@@ -34,15 +34,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 import {
   GoogleMap,
@@ -189,7 +180,6 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
-      // Exclude route.geometry when saving
       const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
@@ -329,7 +319,6 @@ const RouteDisplay = ({
 };
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-const PWA_PROMPT_LS_KEY = 'hasSeenPWAInstallPrompt';
 
 const HomePage = () => {
   const [radius, setRadius] = useState<string>("5"); 
@@ -344,29 +333,12 @@ const HomePage = () => {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
-  const [showInstallPrompt, setShowInstallPrompt] = useState<boolean>(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: googleMapsApiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hasSeenPrompt = localStorage.getItem(PWA_PROMPT_LS_KEY);
-      if (!hasSeenPrompt) {
-        setShowInstallPrompt(true);
-      }
-    }
-  }, []);
-
-  const handleDismissInstallPrompt = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(PWA_PROMPT_LS_KEY, 'true');
-    }
-    setShowInstallPrompt(false);
-  };
 
   useEffect(() => {
     const envApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -394,8 +366,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // Keep authLoading true if critical vars are missing to prevent login attempts
-        setAuthLoading(true);
+        setAuthLoading(true); 
         return; 
     }
     
@@ -591,37 +562,6 @@ const HomePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
-      <AlertDialog open={showInstallPrompt} onOpenChange={setShowInstallPrompt}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground">
-              Get the best experience by adding CycleZen to your home screen.
-              <div className="pt-2">
-                <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
-                <ol className="list-decimal list-inside pl-4">
-                  <li>Tap the three dots (⋮) in the top-right corner of Chrome.</li>
-                  <li>Select "Install app" or "Add to Home screen".</li>
-                  <li>Follow the prompts.</li>
-                </ol>
-              </div>
-              <div className="pt-2">
-                <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
-                <ol className="list-decimal list-inside pl-4">
-                  <li>Tap the "Share" icon (square with an arrow pointing up) at the bottom.</li>
-                  <li>Scroll down and tap "Add to Home Screen".</li>
-                  <li>Confirm by tapping "Add".</li>
-                </ol>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleDismissInstallPrompt} variant="accent">
-              Okay, Got It!
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       
       <div className="relative w-full h-52 sm:h-64 md:h-80 group shadow-lg">
         <Image
@@ -736,13 +676,14 @@ const HomePage = () => {
                   }}
                   onBlur={() => {
                     if (radius === "") { 
+                      setRadius(""); // Keep it empty if blurred empty
                       return; 
                     }
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); 
+                      setRadius(""); // Reset to empty if invalid
                     } else {
-                      setRadius(String(num)); 
+                      setRadius(String(num)); // Normalize valid number
                     }
                   }}
                   placeholder="5 - 100"
@@ -827,4 +768,3 @@ const HomePage = () => {
 
 export default HomePage;
     
-
