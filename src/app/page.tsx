@@ -11,6 +11,7 @@ import {
   addDoc,
   doc,
   getDoc,
+  setDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import {
@@ -258,13 +259,15 @@ const RouteDisplay = ({
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       
-      const { geometry, ...otherRouteProps } = route; 
-      const routeDataToSave: any = { ...otherRouteProps };
+      const routeDataToSave: any = {
+        distance: route.distance,
+        estimatedTime: route.estimatedTime,
+        coordinates: route.coordinates,
+      };
 
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       }
-      // Firestore handles omitting undefined fields, or you can explicitly delete routeDataToSave.ascent if ascent is undefined
       
       if (route.steps) {
         routeDataToSave.steps = route.steps;
@@ -322,12 +325,10 @@ const RouteDisplay = ({
     rideStartTimeRef.current = Date.now() - elapsedTime * 1000; 
     setElapsedTime(0); 
     
-    if (userLocationMarker) { // If we have a current GPS location, use that as the actual start
+    if (userLocationMarker) { 
         setRideStartActualLocation(userLocationMarker);
-    } else if (route.coordinates && route.coordinates.length > 0) { // Otherwise, use the route's defined start
-        setRideStartActualLocation(route.coordinates[0]);
     } else {
-        setRideStartActualLocation(null); // Fallback, should ideally not happen if route is valid
+        setRideStartActualLocation(null); 
     }
 
 
@@ -404,7 +405,6 @@ const RouteDisplay = ({
     if (rideTimerRef.current) clearInterval(rideTimerRef.current);
     if (locationWatcherIdRef.current) navigator.geolocation.clearWatch(locationWatcherIdRef.current);
     locationWatcherIdRef.current = null;
-    // Keep userLocationMarker to show on summary, or set to null if you prefer not to show it post-ride.
     
     setRideSummaryData({ 
         elapsedTime, 
@@ -630,8 +630,8 @@ const RouteDisplay = ({
                     </div>
                 ) : (
                     <div>
-                        <p className="text-2xl font-bold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
-                        <p className="text-sm text-muted-foreground">Planned Distance</p>
+                        <p className="text-2xl font-bold text-primary">N/A</p>
+                        <p className="text-sm text-muted-foreground">Actual Distance Covered</p>
                     </div>
                 )}
 
@@ -642,7 +642,7 @@ const RouteDisplay = ({
                   <p className="text-sm text-muted-foreground">Est. Calories</p>
                 </div>
 
-                {rideSummaryData.actualDistanceCoveredKm !== undefined && (
+                {(rideSummaryData.actualDistanceCoveredKm === undefined || rideSummaryData.actualDistanceCoveredKm !== rideSummaryData.route.distance) && (
                      <div className="mt-1">
                         <p className="text-base font-semibold text-primary">{rideSummaryData.route.distance.toFixed(1)} km</p>
                         <p className="text-xs text-muted-foreground">Total Planned Route Distance</p>
@@ -752,7 +752,6 @@ const HomePage = () => {
           const docSnap = await getDoc(userDocRef);
           const userData = docSnap.data();
           console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
-          console.log(`[handleGoogleSignIn] For new user check: !docSnap.exists() is ${!docSnap.exists()}, !userData?.username is ${!userData?.username}`);
             
           if (!docSnap.exists() || !userData?.username) {
             console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
@@ -760,18 +759,12 @@ const HomePage = () => {
             router.push('/profile');
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-            // onAuthUserChanged will set currentUser and authLoading=false
-            // toast({ title: "Signed In", description: "Successfully signed in with Google." });
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
-           // toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
-        // No user, so onAuthUserChanged will handle setting currentUser to null
-        // and authLoading to false if it hasn't already. If it was a popup close,
-        // authLoading might need explicit setting here.
         setAuthLoading(false); 
       }
     } catch (error: any) {
@@ -815,7 +808,6 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signOutUser();
-      // toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
