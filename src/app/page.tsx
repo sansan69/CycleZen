@@ -194,10 +194,11 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
+      // Exclude geometry from being saved
       const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
-        routeData: routeDataToSave,
+        routeData: routeDataToSave, // Save the route object without geometry
         timestamp: new Date(),
         routeName: `Route Option ${routeIndex + 1} near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected location'} on ${new Date().toLocaleDateString()}`,
         sharedUrl: routeUrl,
@@ -393,7 +394,7 @@ const HomePage = () => {
       setCurrentUser(user);
       setAuthLoading(false); 
       if (user) {
-        console.log("page.tsx onAuthUserChanged: User signed in:", user.uid);
+        console.log("page.tsx onAuthUserChanged: User signed in:", user.uid, user);
       } else {
         console.log("page.tsx onAuthUserChanged: User signed out or auth not initialized properly by service.");
       }
@@ -409,47 +410,42 @@ const HomePage = () => {
     try {
       const user = await signInWithGoogle();
       if (user && db) {
-        // Check if user profile (username) exists in Firestore
         const userDocRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(userDocRef);
 
         if (!docSnap.exists() || !docSnap.data()?.username) {
           toast({ title: "Welcome!", description: "Please complete your profile." });
           router.push('/profile');
-          // setAuthLoading will be handled by onAuthUserChanged
         } else {
           toast({ title: "Signed In", description: "Successfully signed in with Google." });
-          // setAuthLoading will be handled by onAuthUserChanged
         }
       } else if (user) {
          toast({ title: "Signed In", description: "Successfully signed in with Google." });
       }
-      // No explicit setAuthLoading(false) here, onAuthUserChanged handles it
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service:", error);
       let description = `Code: ${error.code || 'N/A'}\nMessage: ${error.message || 'Failed to sign in.'}`;
-       if (error.code === 'auth/unauthorized-domain') {
-        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-        let hostnameToAdd = 'localhost'; 
-        try {
-          hostnameToAdd = new URL(currentOrigin).hostname;
-        } catch(e) {
-          console.warn("Could not parse hostname from currentOrigin", currentOrigin);
-          hostnameToAdd = currentOrigin; 
-        }
-        
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+      let hostnameToAdd = 'localhost'; 
+      try {
+        hostnameToAdd = new URL(currentOrigin).hostname;
+      } catch(e) {
+        console.warn("Could not parse hostname from currentOrigin", currentOrigin);
+        hostnameToAdd = currentOrigin; 
+      }
+
+      if (error.code === 'auth/unauthorized-domain') {
         description = `Error: Your app's current domain ('${hostnameToAdd}') is not authorized for Google Sign-In. 
-        Current Origin: ${currentOrigin}. Configured Firebase Auth Domain in .env.local: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
+        Current Origin: ${currentOrigin}. Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Troubleshooting:
         1. In Firebase console > Project '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'UNKNOWN'}' > Authentication > Settings > Authorized domains: Ensure '${hostnameToAdd}' is listed.
-        2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in .env.local matches your Firebase project's Auth Domain.
+        2. Verify NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN in your .env.local file matches your Firebase project's Auth Domain.
         3. Verify all NEXT_PUBLIC_FIREBASE_* vars are correct.
         4. Restart your Next.js dev server after .env.local changes.`;
       }
       toast({ title: "Sign-in Error", description, variant: "destructive", duration: 10000 });
-      setAuthLoading(false); // Set authLoading false on error
+      setAuthLoading(false); 
     } 
-    // Removed finally block to let onAuthUserChanged manage setAuthLoading on success
   };
 
   const handleSignOut = async () => {
@@ -589,6 +585,8 @@ const HomePage = () => {
       console.log('Autocomplete is not loaded yet for onPlaceChanged!');
     }
   };
+
+  console.log("[HomePage Render] authLoading:", authLoading, "currentUser:", !!currentUser, currentUser); // Diagnostic log
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
