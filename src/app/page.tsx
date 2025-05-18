@@ -4,7 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, ChangeEvent } from "react";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -29,7 +29,7 @@ import {
   signOutUser,
   onAuthUserChanged
 } from "@/lib/firebaseAuthService";
-import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
+import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/services/open-route-service";
 
 import {
   AlertDialog,
@@ -40,6 +40,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
   Card,
@@ -55,6 +56,7 @@ import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
@@ -63,6 +65,18 @@ import GoogleMapComponent from "@/components/google-map";
 
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+const formatTime = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return [
+    h > 0 ? h.toString().padStart(2, '0') : null,
+    m.toString().padStart(2, '0'),
+    s.toString().padStart(2, '0'),
+  ].filter(Boolean).join(':');
+};
+
 
 const RouteDisplay = ({
   route,
@@ -78,6 +92,17 @@ const RouteDisplay = ({
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+
+  // Ride Mode State
+  const [isRideModeActive, setIsRideModeActive] = useState(false);
+  const [isRidePaused, setIsRidePaused] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0); // in seconds
+  const rideTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const rideStartTimeRef = useRef<number | null>(null);
+  const [userLocationMarker, setUserLocationMarker] = useState<Coordinate | null>(null);
+  const locationWatcherIdRef = useRef<number | null>(null);
+  const [showStartRideDialog, setShowStartRideDialog] = useState(false);
+
 
   const mapStyles = {
     height: "300px",
@@ -120,7 +145,7 @@ const RouteDisplay = ({
       });
       mapRef.current.fitBounds(bounds);
     }
-  }, [route.coordinates]);
+  }, [route.coordinates, center]); // Added center to dependencies
 
 
   const MAX_GOOGLE_MAPS_WAYPOINTS = 10;
@@ -200,14 +225,20 @@ const RouteDisplay = ({
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
       
-      const { geometry, ...otherRouteProps } = route;
+      const { geometry, ...otherRouteProps } = route; // Exclude geometry
       const routeDataToSave: any = { ...otherRouteProps };
 
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       } else {
-        // Firestore does not store undefined. Ascent will be omitted if not a valid number.
+        // Firestore handles omitting undefined fields, or you can explicitly delete routeDataToSave.ascent
       }
+      
+      // Ensure 'steps' is included if available
+      if (route.steps) {
+        routeDataToSave.steps = route.steps;
+      }
+
 
       await addDoc(userSavedRoutesCollection, {
         routeData: routeDataToSave,
@@ -223,9 +254,9 @@ const RouteDisplay = ({
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). This might be due to the 'geometry' field which has been excluded; however, please check other fields.";
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
       } else if (error.message && error.message.toLowerCase().includes("unsupported field value: undefined")) {
-         description = "Failed to save route: The route data contains an undefined value (likely 'ascent') that cannot be stored.";
+         description = "Failed to save route: The route data contains an undefined value that cannot be stored.";
       } else if (error.message) {
         description = error.message;
       }
@@ -252,6 +283,83 @@ const RouteDisplay = ({
         variant: "destructive",
       });
     }
+  };
+
+  const startRide = () => {
+    setIsRideModeActive(true);
+    setIsRidePaused(false);
+    rideStartTimeRef.current = Date.now() - elapsedTime * 1000; // Adjust start time if resuming
+    setElapsedTime(0); // Reset elapsed time for new ride or use existing for resume
+
+    if (rideTimerRef.current) clearInterval(rideTimerRef.current);
+    rideTimerRef.current = setInterval(() => {
+      if (rideStartTimeRef.current && !isRidePaused) { // Check isRidePaused here
+        setElapsedTime(Math.floor((Date.now() - rideStartTimeRef.current) / 1000));
+      }
+    }, 1000);
+
+    if (navigator.geolocation) {
+      locationWatcherIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          setUserLocationMarker({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error("Error watching location:", error);
+          toast({ title: "Location Error", description: "Could not track your location.", variant: "destructive"});
+          setUserLocationMarker(null);
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      );
+    } else {
+      toast({ title: "Location Services", description: "Geolocation is not supported by your browser.", variant: "destructive"});
+    }
+    setShowStartRideDialog(false);
+  };
+  
+  useEffect(() => {
+    // Effect to manage the timer interval based on isRidePaused
+    if (isRideModeActive && !isRidePaused && rideStartTimeRef.current) {
+        if (rideTimerRef.current) clearInterval(rideTimerRef.current); // Clear existing
+        rideTimerRef.current = setInterval(() => {
+            setElapsedTime(Math.floor((Date.now() - (rideStartTimeRef.current ?? Date.now())) / 1000));
+        }, 1000);
+    } else if (rideTimerRef.current) {
+        clearInterval(rideTimerRef.current);
+    }
+
+    return () => { // Cleanup on component unmount or when ride mode ends
+        if (rideTimerRef.current) clearInterval(rideTimerRef.current);
+        if (locationWatcherIdRef.current) {
+            navigator.geolocation.clearWatch(locationWatcherIdRef.current);
+        }
+    };
+  }, [isRideModeActive, isRidePaused]); // React to isRidePaused changes
+
+  const handlePauseResumeRide = () => {
+    setIsRidePaused(prev => {
+      const newPausedState = !prev;
+      if (newPausedState) { // Pausing
+        if (rideTimerRef.current) clearInterval(rideTimerRef.current);
+      } else { // Resuming
+        rideStartTimeRef.current = Date.now() - elapsedTime * 1000; 
+        // Timer restart is handled by the useEffect above
+      }
+      return newPausedState;
+    });
+  };
+
+  const handleStopRide = () => {
+    setIsRideModeActive(false);
+    setIsRidePaused(false);
+    if (rideTimerRef.current) clearInterval(rideTimerRef.current);
+    if (locationWatcherIdRef.current) navigator.geolocation.clearWatch(locationWatcherIdRef.current);
+    locationWatcherIdRef.current = null;
+    setUserLocationMarker(null);
+    toast({ title: "Ride Finished", description: `Total time: ${formatTime(elapsedTime)}`});
+    // elapsedTime is already set, no need to set it to 0 here unless you want to clear it for next ride immediately
   };
 
 
@@ -320,29 +428,100 @@ const RouteDisplay = ({
                   <Marker position={route.coordinates[0]} />
                 </>
               )}
+              {isRideModeActive && userLocationMarker && (
+                 <Marker
+                    position={userLocationMarker}
+                    icon={{
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 7,
+                        fillColor: "hsl(var(--accent))",
+                        fillOpacity: 1,
+                        strokeWeight: 2,
+                        strokeColor: "white",
+                    }}
+                    title="Your Location"
+                 />
+              )}
             </GoogleMap>
           </div>
         ) : (
           <Skeleton className="h-[300px] w-full bg-muted" />
         )}
+
+        {isRideModeActive && (
+            <div className="mt-4 p-3 bg-muted rounded-md border border-border">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-lg font-semibold text-primary">Ride Active</h3>
+                    <p className="text-xl font-bold text-foreground">{formatTime(elapsedTime)}</p>
+                </div>
+                <div className="flex gap-2 mt-2">
+                    <Button onClick={handlePauseResumeRide} variant="outline" className="flex-1">
+                        {isRidePaused ? <Icons.play className="mr-2 h-4 w-4" /> : <Icons.pause className="mr-2 h-4 w-4" />}
+                        {isRidePaused ? "Resume" : "Pause"}
+                    </Button>
+                    <Button onClick={handleStopRide} variant="destructive" className="flex-1">
+                        <Icons.stop className="mr-2 h-4 w-4" /> Stop Ride
+                    </Button>
+                </div>
+            </div>
+        )}
+
+        {isRideModeActive && route.steps && route.steps.length > 0 && (
+          <div className="mt-4">
+            <h4 className="text-md font-semibold text-foreground mb-2">Turn Instructions:</h4>
+            <ScrollArea className="h-[200px] w-full rounded-md border p-3 bg-background">
+              <ol className="list-decimal list-inside space-y-1.5 text-sm">
+                {route.steps.map((step, idx) => (
+                  <li key={idx}>
+                    {step.instruction} ({step.distance.toFixed(0)}m)
+                  </li>
+                ))}
+              </ol>
+            </ScrollArea>
+          </div>
+        )}
+
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
-        <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
-          <a href={routeUrl} target='_blank' rel="noopener noreferrer">Open in Google Maps</a>
-        </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
+          {!isRideModeActive && (
+            <Button onClick={() => setShowStartRideDialog(true)} variant="accent">
+              <Icons.play className="mr-2 h-4 w-4" /> Start Ride
+            </Button>
+          )}
+           <Button asChild variant="outline" className="border-accent text-accent hover:bg-accent/10">
+            <a href={routeUrl} target='_blank' rel="noopener noreferrer">Open in Google Maps</a>
+          </Button>
+        </div>
+        
+        <div className="flex gap-2 flex-wrap justify-center sm:justify-end">
           <Button onClick={handleShareRoute} variant="outline" className="hover:bg-secondary/80">
             <Icons.share className="mr-2 h-4 w-4" /> Share
           </Button>
           <Button
             onClick={handleSaveRoute}
-            disabled={!user || !user.uid}
+            disabled={!user || !user.uid || isRideModeActive}
             className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
           >
             <Icons.bookmark className="mr-2 h-4 w-4" /> Save this route
           </Button>
         </div>
       </CardFooter>
+       <AlertDialog open={showStartRideDialog} onOpenChange={setShowStartRideDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start Navigation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will start tracking your location and a timer for your ride. Ensure location permissions are enabled.
+              This is a basic visual guide; for full voice navigation, use "Open in Google Maps".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={startRide}>Start Ride</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
@@ -396,6 +575,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
+         setAuthLoading(false); // Stop loading if config is critically missing
         return;
     }
 
@@ -416,7 +596,7 @@ const HomePage = () => {
   }, [toast]);
 
 
-  const handleGoogleSignIn = async () => {
+ const handleGoogleSignIn = async () => {
     console.log("[handleGoogleSignIn] Attempting Google Sign-In via service.");
     setAuthLoading(true);
     try {
@@ -432,18 +612,18 @@ const HomePage = () => {
           console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
           console.log(`[handleGoogleSignIn] For new user check: !docSnap.exists() is ${!docSnap.exists()}, !userData?.username is ${!userData?.username}`);
 
-
           if (!docSnap.exists() || !userData?.username) {
             console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
             toast({ title: "Welcome!", description: "Please complete your profile." });
             router.push('/profile');
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-            toast({ title: "Signed In", description: "Successfully signed in with Google." });
+            // onAuthUserChanged will set currentUser and authLoading=false
+            // toast({ title: "Signed In", description: "Successfully signed in with Google." });
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
-          toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
+          // toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
@@ -469,8 +649,7 @@ const HomePage = () => {
           duration: 5000
         });
       } else if (error.code === 'auth/unauthorized-domain') {
-        const unauthorizedDomainDescription = `Error: Your app's current domain is not authorized for Google Sign-In.
-        Current Origin: ${currentOrigin}. Hostname to add: '${hostnameToAdd}'.
+         const unauthorizedDomainDescription = `Error: Your app's current domain (${currentOrigin}, hostname: '${hostnameToAdd}') is not authorized for Google Sign-In.
         Configured Firebase Auth Domain: ${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'Not Set'}.
         Project ID: ${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'Not Set'}.
         Troubleshooting:
@@ -491,15 +670,17 @@ const HomePage = () => {
     setAuthLoading(true);
     try {
       await signOutUser();
-      toast({ title: "Signed Out", description: "Successfully signed out." });
+      // onAuthUserChanged will set currentUser to null and authLoading to false
+      // toast({ title: "Signed Out", description: "Successfully signed out." });
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
+      setAuthLoading(false); // Explicitly set loading to false on error
     }
   };
 
   const isRadiusValid = (r: string): boolean => {
-    if (r === "") return false;
+    if (r === "") return false; // Empty string is invalid
     const num = parseInt(r, 10);
     return !isNaN(num) && num >= 5 && num <= 100;
   };
@@ -514,8 +695,7 @@ const HomePage = () => {
       return;
     }
 
-    const numericRadius = parseInt(radius, 10);
-    if (!isRadiusValid(radius)) {
+    if (!isRadiusValid(radius)) { // Use the validation function
        toast({
         title: "Invalid Target Distance",
         description: "Please enter a target loop distance between 5 and 100 km.",
@@ -523,6 +703,7 @@ const HomePage = () => {
       });
       return;
     }
+    const numericRadius = parseInt(radius, 10); // Safe to parse now
 
     setLoadingRoutes(true);
     setRoutes(null);
@@ -585,9 +766,10 @@ const HomePage = () => {
     previousSelectedLocationRef.current = selectedLocation;
   }, [selectedLocation, toast]);
 
-  const currentRadiusValue = parseInt(radius, 10);
+  const currentRadiusValue = parseInt(radius, 10); // radius is string
   const displayRadius = !isNaN(currentRadiusValue) && currentRadiusValue >=5 && currentRadiusValue <=100 ? currentRadiusValue : (radius === "" ? "" : 5);
   const numericRadiusForMap = isRadiusValid(radius) ? parseInt(radius, 10) : null;
+
 
   const onLoadAutocomplete = (autocompleteInstance: google.maps.places.Autocomplete) => {
     setAutocomplete(autocompleteInstance);
@@ -657,7 +839,7 @@ const HomePage = () => {
         </div>
       </div>
 
-      <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8">
+       <header className="w-full max-w-2xl mx-auto py-4 px-4 sm:px-6 md:px-8">
         {authLoading ? (
           <div className="flex justify-center items-center py-2">
             <Button variant="outline" disabled className="w-full sm:w-auto">
@@ -744,29 +926,30 @@ const HomePage = () => {
               </Label>
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <Input
-                  type="text"
+                  type="text" 
                   id="radius"
                   value={radius}
-                   onChange={(e) => {
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     const value = e.target.value;
-                    if (value === "" || /^\d*$/.test(value)) {
+                    if (value === "" || /^\d*$/.test(value)) { // Allow empty or only digits
                       setRadius(value);
                     }
                   }}
                   onBlur={() => {
-                    if (radius === "") return;
+                    if (radius === "") return; // Allow to be empty on blur
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); 
+                      setRadius(""); // Reset to empty if invalid
+                      toast({ title: "Invalid Distance", description: "Distance must be between 5 and 100 km.", variant: "destructive"});
                     } else {
-                      setRadius(String(num)); 
+                      setRadius(String(num)); // Normalize (e.g., "07" to "7")
                     }
                   }}
                   placeholder="5 - 100"
                   className="w-full sm:w-24 bg-background border-input focus:ring-primary focus:border-primary rounded-md"
                 />
                 <Slider
-                  value={[isNaN(currentRadiusValue) || radius === "" ? 5 : Math.max(5, Math.min(100, currentRadiusValue))]}
+                  value={[isNaN(currentRadiusValue) || radius === "" || !isRadiusValid(radius) ? 5 : Math.max(5, Math.min(100, currentRadiusValue))]}
                   min={5}
                   max={100}
                   step={1}
@@ -775,7 +958,7 @@ const HomePage = () => {
                   aria-label="Target loop distance slider"
                 />
                 <span className="text-sm font-medium text-foreground w-full sm:w-12 text-center sm:text-right mt-2 sm:mt-0">
-                  {displayRadius}{radius !== "" && isRadiusValid(radius) ? " km" : ""}
+                  {isRadiusValid(radius) ? `${radius} km` : (radius === "" ? "" : "")}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -844,6 +1027,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-
-
-    

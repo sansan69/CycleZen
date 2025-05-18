@@ -23,6 +23,7 @@ import {
 
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/lib/firebaseAuthService";
+import type { RouteStep } from "@/services/open-route-service"; // Import RouteStep
 
 import {
   AlertDialog,
@@ -55,6 +56,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icons } from "@/components/icons";
 import { Toaster } from "@/components/ui/toaster";
@@ -70,7 +72,8 @@ interface SavedRouteData {
   distance: number;
   estimatedTime: number;
   ascent?: number;
-  coordinates: Coordinate[]; // Ensure coordinates are part of the type
+  coordinates: Coordinate[]; 
+  steps?: RouteStep[]; // Add steps here
 }
 
 interface SavedRouteDoc {
@@ -104,7 +107,7 @@ const SavedRoutesPage = () => {
   const [editedRouteNotes, setEditedRouteNotes] = useState("");
 
   const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script", // Changed ID to be consistent
+    id: "google-map-script", 
     googleMapsApiKey: googleMapsApiKey,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
@@ -132,7 +135,6 @@ const SavedRoutesPage = () => {
         .then((querySnapshot) => {
           const routes: SavedRouteDoc[] = [];
           querySnapshot.forEach((doc) => {
-            // Ensure routeData.coordinates exists before pushing
             const data = doc.data();
             if (data.routeData && data.routeData.coordinates) {
               routes.push({ id: doc.id, ...data } as SavedRouteDoc);
@@ -140,7 +142,6 @@ const SavedRoutesPage = () => {
               console.warn(`Saved route ${doc.id} is missing coordinate data.`);
             }
           });
-          // Explicitly sort client-side to ensure descending order by timestamp
           routes.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
           setSavedRoutes(routes);
           setLoadingRoutes(false);
@@ -380,7 +381,7 @@ const SavedRoutesPage = () => {
                       {new Date(route.timestamp.toDate()).toLocaleDateString()}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4"> {/* Added space-y-4 for map */}
+                  <CardContent className="space-y-4"> 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-2 text-sm">
                       <div className="flex items-center">
                         <Icons.route className="mr-2 h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -427,7 +428,7 @@ const SavedRoutesPage = () => {
                             streetViewControl: false,
                             mapTypeControl: false,
                             fullscreenControl: true,
-                            gestureHandling: 'cooperative' // Good for scrollable pages
+                            gestureHandling: 'cooperative' 
                           }}
                           onLoad={(map) => onMapLoad(map, route.routeData.coordinates)}
                         >
@@ -457,6 +458,21 @@ const SavedRoutesPage = () => {
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                           {route.notes}
                         </p>
+                      </div>
+                    )}
+
+                    {route.routeData.steps && route.routeData.steps.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-md font-semibold text-foreground mb-2">Turn Instructions:</h4>
+                        <ScrollArea className="h-[150px] w-full rounded-md border p-3 bg-background">
+                          <ol className="list-decimal list-inside space-y-1.5 text-sm">
+                            {route.routeData.steps.map((step, idx) => (
+                              <li key={idx}>
+                                {step.instruction} ({step.distance.toFixed(0)}m)
+                              </li>
+                            ))}
+                          </ol>
+                        </ScrollArea>
                       </div>
                     )}
                   </CardContent>
@@ -589,4 +605,3 @@ const SavedRoutesPage = () => {
 };
 
 export default SavedRoutesPage;
-

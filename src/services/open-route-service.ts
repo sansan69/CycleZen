@@ -18,6 +18,18 @@ export interface Coordinate {
 }
 
 /**
+ * Represents a single step or maneuver in a cycling route.
+ */
+export interface RouteStep {
+  distance: number; // in meters
+  duration: number; // in seconds
+  type: number;
+  instruction: string;
+  name: string;
+  way_points: [number, number]; // OSRM specific internal indices
+}
+
+/**
  * Represents a cycling route.
  */
 export interface CyclingRoute {
@@ -41,6 +53,10 @@ export interface CyclingRoute {
    * The raw geometry string, if needed for other purposes (optional)
    */
   geometry?: any; // Can be GeoJSON Geometry object
+  /**
+   * Detailed turn-by-turn steps for the route.
+   */
+  steps?: RouteStep[];
 }
 
 /**
@@ -109,8 +125,10 @@ async function fetchRoute(
   const body = {
     "coordinates": coordinatesPayload,
     "options": options,
-    "preference": "recommended",
+    "preference": "recommended", // Moved here as per previous fix
     "geometry_simplify": "true", 
+    "instructions_format": "text", // To get textual instructions
+    "language": "en",
   };
 
   const response = await fetch(url, {
@@ -169,11 +187,17 @@ async function fetchRoute(
     ascentMeters = summary.ascent;
   }
 
+  let steps: RouteStep[] | undefined = undefined;
+  if (feature.properties.segments && feature.properties.segments[0] && feature.properties.segments[0].steps) {
+    steps = feature.properties.segments[0].steps;
+  }
+
   return {
     distance: distanceKm,
     estimatedTime: durationMinutes,
     coordinates: routeCoordinates,
     ascent: ascentMeters,
-    geometry: feature.geometry 
+    geometry: feature.geometry,
+    steps: steps,
   };
 }
