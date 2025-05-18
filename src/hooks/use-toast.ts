@@ -1,3 +1,4 @@
+
 "use client"
 
 // Inspired by react-hot-toast library
@@ -186,9 +187,13 @@ function useToast() {
 
   return {
     ...state,
-    toast,
-    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+    toast, // This is the global toast function, already stable
+    dismiss: React.useCallback(
+      (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+      [] // Memoize dismiss function
+    ),
   }
 }
 
 export { useToast, toast }
+
