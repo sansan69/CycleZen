@@ -20,6 +20,17 @@ import {
 } from "@/lib/firebaseAuthService";
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
   Card,
   CardContent,
   CardDescription,
@@ -180,6 +191,7 @@ const RouteDisplay = ({
     }
     try {
       const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
+      // Exclude geometry from saving as it can contain nested arrays not supported by Firestore
       const { geometry, ...routeDataToSave } = route; 
 
       await addDoc(userSavedRoutesCollection, {
@@ -196,7 +208,7 @@ const RouteDisplay = ({
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
       if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
-        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
+        description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays). Please try removing the 'geometry' field if present.";
       } else if (error.message) {
         description = error.message;
       }
@@ -592,9 +604,9 @@ const HomePage = () => {
         ) : currentUser ? (
            <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] sm:items-center gap-3 w-full">
             <div className="w-full sm:w-auto order-2 sm:order-1 sm:justify-self-start">
-              <Link href="/saved-routes" passHref>
+              <Link href="/profile" passHref>
                 <Button variant="outline" className="w-full">
-                  <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
+                  <Icons.userCog className="mr-2 h-4 w-4" /> Profile
                 </Button>
               </Link>
             </div>
@@ -676,14 +688,14 @@ const HomePage = () => {
                   }}
                   onBlur={() => {
                     if (radius === "") { 
-                      setRadius(""); // Keep it empty if blurred empty
+                      setRadius(""); 
                       return; 
                     }
                     const num = parseInt(radius, 10);
                     if (isNaN(num) || num < 5 || num > 100) {
-                      setRadius(""); // Reset to empty if invalid
+                      setRadius(""); 
                     } else {
-                      setRadius(String(num)); // Normalize valid number
+                      setRadius(String(num)); 
                     }
                   }}
                   placeholder="5 - 100"
