@@ -22,7 +22,7 @@ import {
   useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
-import html2canvas from 'html2canvas';
+// import html2canvas from 'html2canvas'; // Temporarily removed
 
 
 import { db } from "@/lib/firebase";
@@ -125,7 +125,7 @@ const RouteDisplay = ({
     actualDistanceCoveredKm?: number;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
-  const rideSummaryContentRef = useRef<HTMLDivElement>(null);
+  // const rideSummaryContentRef = useRef<HTMLDivElement>(null); // Temporarily removed
 
 
   const mapStyles = {
@@ -416,63 +416,59 @@ const RouteDisplay = ({
     setShowRideSummaryDialog(true);
   };
 
-  const handleShareAsImage = async () => {
-    if (!rideSummaryContentRef.current) {
-      toast({ title: "Error", description: "Cannot capture summary content.", variant: "destructive" });
-      return;
-    }
+  // const handleShareAsImage = async () => { // Temporarily removed
+  //   if (!rideSummaryContentRef.current) {
+  //     toast({ title: "Error", description: "Cannot capture summary content.", variant: "destructive" });
+  //     return;
+  //   }
 
-    try {
-      const canvas = await html2canvas(rideSummaryContentRef.current, { 
-        useCORS: true,
-        // It's often good to remove the map controls before capture if html2canvas has trouble with them
-        // Or explicitly hide them with CSS during capture if possible
-        onclone: (documentClone) => {
-          const mapControls = documentClone.querySelectorAll('.gmnoprint');
-          mapControls.forEach(control => (control as HTMLElement).style.display = 'none');
-        }
-      });
-      const dataUrl = canvas.toDataURL('image/png');
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], 'cyclezen-ride-summary.png', { type: 'image/png' });
+  //   try {
+  //     const canvas = await html2canvas(rideSummaryContentRef.current, { 
+  //       useCORS: true,
+  //       onclone: (documentClone) => {
+  //         const mapControls = documentClone.querySelectorAll('.gmnoprint');
+  //         mapControls.forEach(control => (control as HTMLElement).style.display = 'none');
+  //       }
+  //     });
+  //     const dataUrl = canvas.toDataURL('image/png');
+  //     const blob = await (await fetch(dataUrl)).blob();
+  //     const file = new File([blob], 'cyclezen-ride-summary.png', { type: 'image/png' });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: 'My CycleZen Ride Summary',
-          text: 'Check out my latest ride with CycleZen!',
-          files: [file],
-        });
-        toast({ title: "Shared!", description: "Ride summary image shared." });
-      } else {
-        // Fallback: Download the image
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = 'cyclezen-ride-summary.png';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast({ title: "Image Downloaded", description: "Image saved. You can share it manually." });
-      }
-    } catch (error) {
-      console.error("Error sharing image:", error);
-      toast({ title: "Share Error", description: "Could not share ride summary as image. Image downloaded instead.", variant: "destructive" });
-       // Attempt download as fallback on error too
-      if (rideSummaryContentRef.current) {
-        try {
-            const canvas = await html2canvas(rideSummaryContentRef.current, { useCORS: true });
-            const dataUrl = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = dataUrl;
-            link.download = 'cyclezen-ride-summary.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        } catch (downloadError) {
-            console.error("Error downloading image as fallback:", downloadError);
-        }
-      }
-    }
-  };
+  //     if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  //       await navigator.share({
+  //         title: 'My CycleZen Ride Summary',
+  //         text: 'Check out my latest ride with CycleZen!',
+  //         files: [file],
+  //       });
+  //       toast({ title: "Shared!", description: "Ride summary image shared." });
+  //     } else {
+  //       const link = document.createElement('a');
+  //       link.href = dataUrl;
+  //       link.download = 'cyclezen-ride-summary.png';
+  //       document.body.appendChild(link);
+  //       link.click();
+  //       document.body.removeChild(link);
+  //       toast({ title: "Image Downloaded", description: "Image saved. You can share it manually." });
+  //     }
+  //   } catch (error) {
+  //     console.error("Error sharing image:", error);
+  //     toast({ title: "Share Error", description: "Could not share ride summary as image. Image downloaded instead.", variant: "destructive" });
+  //     if (rideSummaryContentRef.current) {
+  //       try {
+  //           const canvas = await html2canvas(rideSummaryContentRef.current, { useCORS: true });
+  //           const dataUrl = canvas.toDataURL('image/png');
+  //           const link = document.createElement('a');
+  //           link.href = dataUrl;
+  //           link.download = 'cyclezen-ride-summary.png';
+  //           document.body.appendChild(link);
+  //           link.click();
+  //           document.body.removeChild(link);
+  //       } catch (downloadError) {
+  //           console.error("Error downloading image as fallback:", downloadError);
+  //       }
+  //     }
+  //   }
+  // };
 
 
   if (!center && !(route.coordinates && route.coordinates.length > 0)) {
@@ -646,7 +642,7 @@ const RouteDisplay = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {rideSummaryData && (
-            <div ref={rideSummaryContentRef} className="space-y-4 my-4 p-4 bg-background rounded"> {/* Added ref and padding for capture */}
+            <div /* ref={rideSummaryContentRef} Temporarily removed */ className="space-y-4 my-4 p-4 bg-background rounded"> {/* Added ref and padding for capture */}
               <div className="h-64 w-full rounded-md overflow-hidden border border-border">
                 {googleMapsApiKey ? (
                   <GoogleMap
@@ -654,7 +650,7 @@ const RouteDisplay = ({
                     options={{
                       streetViewControl: false,
                       mapTypeControl: false,
-                      fullscreenControl: false, // Usually false for captured images
+                      fullscreenControl: false, 
                       gestureHandling: 'cooperative'
                     }}
                     onLoad={(map) => onMapLoadSummary(map, rideSummaryData.route)}
@@ -712,9 +708,9 @@ const RouteDisplay = ({
             </div>
           )}
           <AlertDialogFooter>
-            <Button variant="outline" onClick={handleShareAsImage} className="mr-auto">
+            {/* <Button variant="outline" onClick={handleShareAsImage} className="mr-auto"> // Temporarily removed
                 <Icons.shareAsImage className="mr-2 h-4 w-4" /> Share as Image
-            </Button>
+            </Button> */}
             <AlertDialogAction onClick={() => {
               setShowRideSummaryDialog(false);
               setRideSummaryData(null); 
@@ -745,6 +741,24 @@ const HomePage = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const router = useRouter();
+
+  const [showPWAInstallInstructions, setShowPWAInstallInstructions] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hasSeenPrompt = localStorage.getItem('hasSeenPWAInstallPrompt');
+      if (!hasSeenPrompt) {
+        setShowPWAInstallInstructions(true);
+      }
+    }
+  }, []);
+
+  const handleDismissInstallPrompt = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hasSeenPWAInstallPrompt', 'true');
+    }
+    setShowPWAInstallInstructions(false);
+  };
 
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -779,7 +793,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-         setAuthLoading(false); 
+        setAuthLoading(false); 
         return;
     }
 
@@ -809,21 +823,26 @@ const HomePage = () => {
 
       if (user) {
         console.log(`[handleGoogleSignIn] User signed in: ${user.uid}. Checking Firestore for profile.`);
-        // Temporarily commenting out profile check and redirect for debugging auth/popup-closed-by-user
+        
         if (db) {
           const userDocRef = doc(db, "users", user.uid);
           console.log(`[handleGoogleSignIn] Checking Firestore for user: ${user.uid}`);
-          const docSnap = await getDoc(userDocRef);
-          const userData = docSnap.data();
-          console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
-            
-          if (!docSnap.exists() || !userData?.username) {
-            console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
-            toast({ title: "Welcome!", description: "Please complete your profile." });
-            router.push('/profile');
-          } else {
-            console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
-             toast({ title: "Signed In", description: `Welcome back, ${userData.username || user.displayName || user.email}!`});
+          try {
+            const docSnap = await getDoc(userDocRef);
+            const userData = docSnap.data();
+            console.log(`[handleGoogleSignIn] Firestore docSnap.exists(): ${docSnap.exists()}, userData:`, userData);
+              
+            if (!docSnap.exists() || !userData?.username) {
+              console.log(`[handleGoogleSignIn] New user or profile incomplete. Redirecting to /profile.`);
+              toast({ title: "Welcome!", description: "Please complete your profile." });
+              router.push('/profile');
+            } else {
+              console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
+               toast({ title: "Signed In", description: `Welcome back, ${userData.username || user.displayName || user.email}!`});
+            }
+          } catch (firestoreError) {
+            console.error("[handleGoogleSignIn] Firestore error checking profile:", firestoreError);
+            toast({ title: "Signed In", description: `Welcome, ${user.displayName || user.email}! (Profile check failed)`, variant: "default" });
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
@@ -831,7 +850,6 @@ const HomePage = () => {
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null. This may happen if the popup was closed.");
-        // setAuthLoading(false); // This will be handled by onAuthUserChanged if sign-in truly failed
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
@@ -865,8 +883,10 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-      setAuthLoading(false); 
-    } 
+      // setAuthLoading(false); // Let onAuthUserChanged handle this if sign-in truly failed or was cancelled.
+    } finally {
+       // setAuthLoading(true) was at the start, onAuthUserChanged will set it to false eventually
+    }
   };
 
   const handleSignOut = async () => {
@@ -878,9 +898,7 @@ const HomePage = () => {
     } catch (error: any) {
       console.error("[handleSignOut] Error from signOutUser service:", error);
       toast({ title: "Sign-Out Error", description: error.message || "Failed to sign out.", variant: "destructive" });
-    } finally {
-        // setAuthLoading(false); // This will be handled by onAuthUserChanged
-    }
+    } 
   };
 
   const isRadiusValid = (r: string): boolean => {
@@ -1023,6 +1041,36 @@ const HomePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-secondary font-sans">
       <Toaster />
+      <AlertDialog open={showPWAInstallInstructions} onOpenChange={setShowPWAInstallInstructions}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground">
+              Get the best experience by adding CycleZen to your home screen.
+              <div className="pt-2">
+                <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
+                <ol className="list-decimal list-inside pl-4">
+                  <li>Open CycleZen in Chrome.</li>
+                  <li>Tap the three dots (⋮) in the top-right.</li>
+                  <li>Tap &quot;Install app&quot; or &quot;Add to Home screen&quot;.</li>
+                </ol>
+              </div>
+              <div className="pt-2">
+                <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
+                <ol className="list-decimal list-inside pl-4">
+                  <li>Open CycleZen in Safari.</li>
+                  <li>Tap the Share icon (square with arrow up).</li>
+                  <li>Scroll down and tap &quot;Add to Home Screen&quot;.</li>
+                </ol>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={handleDismissInstallPrompt} variant="accent">Okay, Got It!</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       <div className="relative w-full h-52 sm:h-64 md:h-80 group shadow-lg">
         <Image
@@ -1052,14 +1100,14 @@ const HomePage = () => {
           </div>
         ) : currentUser ? (
            <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] items-center gap-3 w-full">
-            <div className="w-full sm:w-auto order-2 sm:order-1 sm:justify-self-start">
+            <div className="w-full sm:w-auto order-1 sm:order-1 sm:justify-self-start">
               <Link href="/saved-routes" passHref>
                 <Button variant="outline" className="w-full">
                   <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
                 </Button>
               </Link>
             </div>
-            <div className="text-sm text-foreground text-center order-1 sm:order-2 py-1 sm:py-0">
+            <div className="text-sm text-foreground text-center order-2 sm:order-2 py-1 sm:py-0">
               <Link href="/profile" passHref>
                 <Button variant="link" className="text-sm text-foreground hover:text-primary p-0 h-auto hover:underline">
                  Hi, {capitalizeName(currentUser.displayName || currentUser.email)}
@@ -1232,4 +1280,4 @@ const HomePage = () => {
 
 export default HomePage;
 
-    
+      
