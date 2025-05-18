@@ -22,7 +22,6 @@ import {
   useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
-// import html2canvas from 'html2canvas'; // Temporarily removed
 
 
 import { db } from "@/lib/firebase";
@@ -264,9 +263,10 @@ const RouteDisplay = ({
       const routeDataToSave: any = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates,
+        coordinates: route.coordinates, // This is an array of {lat, lng} objects
       };
-
+      
+      // Only include ascent if it's a valid number
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       }
@@ -417,57 +417,6 @@ const RouteDisplay = ({
   };
 
   // const handleShareAsImage = async () => { // Temporarily removed
-  //   if (!rideSummaryContentRef.current) {
-  //     toast({ title: "Error", description: "Cannot capture summary content.", variant: "destructive" });
-  //     return;
-  //   }
-
-  //   try {
-  //     const canvas = await html2canvas(rideSummaryContentRef.current, { 
-  //       useCORS: true,
-  //       onclone: (documentClone) => {
-  //         const mapControls = documentClone.querySelectorAll('.gmnoprint');
-  //         mapControls.forEach(control => (control as HTMLElement).style.display = 'none');
-  //       }
-  //     });
-  //     const dataUrl = canvas.toDataURL('image/png');
-  //     const blob = await (await fetch(dataUrl)).blob();
-  //     const file = new File([blob], 'cyclezen-ride-summary.png', { type: 'image/png' });
-
-  //     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-  //       await navigator.share({
-  //         title: 'My CycleZen Ride Summary',
-  //         text: 'Check out my latest ride with CycleZen!',
-  //         files: [file],
-  //       });
-  //       toast({ title: "Shared!", description: "Ride summary image shared." });
-  //     } else {
-  //       const link = document.createElement('a');
-  //       link.href = dataUrl;
-  //       link.download = 'cyclezen-ride-summary.png';
-  //       document.body.appendChild(link);
-  //       link.click();
-  //       document.body.removeChild(link);
-  //       toast({ title: "Image Downloaded", description: "Image saved. You can share it manually." });
-  //     }
-  //   } catch (error) {
-  //     console.error("Error sharing image:", error);
-  //     toast({ title: "Share Error", description: "Could not share ride summary as image. Image downloaded instead.", variant: "destructive" });
-  //     if (rideSummaryContentRef.current) {
-  //       try {
-  //           const canvas = await html2canvas(rideSummaryContentRef.current, { useCORS: true });
-  //           const dataUrl = canvas.toDataURL('image/png');
-  //           const link = document.createElement('a');
-  //           link.href = dataUrl;
-  //           link.download = 'cyclezen-ride-summary.png';
-  //           document.body.appendChild(link);
-  //           link.click();
-  //           document.body.removeChild(link);
-  //       } catch (downloadError) {
-  //           console.error("Error downloading image as fallback:", downloadError);
-  //       }
-  //     }
-  //   }
   // };
 
 
@@ -709,7 +658,6 @@ const RouteDisplay = ({
           )}
           <AlertDialogFooter>
             {/* <Button variant="outline" onClick={handleShareAsImage} className="mr-auto"> // Temporarily removed
-                <Icons.shareAsImage className="mr-2 h-4 w-4" /> Share as Image
             </Button> */}
             <AlertDialogAction onClick={() => {
               setShowRideSummaryDialog(false);
@@ -793,7 +741,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        setAuthLoading(false); 
+        // setAuthLoading(false); // Let onAuthUserChanged handle this
         return;
     }
 
@@ -801,6 +749,7 @@ const HomePage = () => {
     console.log('page.tsx useEffect: Auth Domain from env is:', envAuthDomain);
 
     const unsubscribe = onAuthUserChanged((user) => {
+      console.log("page.tsx onAuthUserChanged: User state changed, new user:", user);
       setCurrentUser(user);
       setAuthLoading(false); 
       if (user) {
@@ -883,10 +832,7 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-      // setAuthLoading(false); // Let onAuthUserChanged handle this if sign-in truly failed or was cancelled.
-    } finally {
-       // setAuthLoading(true) was at the start, onAuthUserChanged will set it to false eventually
-    }
+    } 
   };
 
   const handleSignOut = async () => {
@@ -1045,26 +991,28 @@ const HomePage = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Install CycleZen for Quick Access!</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground">
+            <AlertDialogDescription className="text-sm text-muted-foreground">
               Get the best experience by adding CycleZen to your home screen.
-              <div className="pt-2">
-                <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
-                <ol className="list-decimal list-inside pl-4">
-                  <li>Open CycleZen in Chrome.</li>
-                  <li>Tap the three dots (⋮) in the top-right.</li>
-                  <li>Tap &quot;Install app&quot; or &quot;Add to Home screen&quot;.</li>
-                </ol>
-              </div>
-              <div className="pt-2">
-                <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
-                <ol className="list-decimal list-inside pl-4">
-                  <li>Open CycleZen in Safari.</li>
-                  <li>Tap the Share icon (square with arrow up).</li>
-                  <li>Scroll down and tap &quot;Add to Home Screen&quot;.</li>
-                </ol>
-              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="text-sm text-muted-foreground space-y-4 pt-2">
+            <div>
+              <h3 className="font-semibold text-foreground">On Android (using Chrome):</h3>
+              <ol className="list-decimal list-inside pl-4">
+                <li>Open CycleZen in Chrome.</li>
+                <li>Tap the three dots (⋮) in the top-right.</li>
+                <li>Tap &quot;Install app&quot; or &quot;Add to Home screen&quot;.</li>
+              </ol>
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground">On iOS (using Safari):</h3>
+              <ol className="list-decimal list-inside pl-4">
+                <li>Open CycleZen in Safari.</li>
+                <li>Tap the Share icon (square with arrow up).</li>
+                <li>Scroll down and tap &quot;Add to Home Screen&quot;.</li>
+              </ol>
+            </div>
+          </div>
           <AlertDialogFooter>
             <AlertDialogAction onClick={handleDismissInstallPrompt} variant="accent">Okay, Got It!</AlertDialogAction>
           </AlertDialogFooter>
