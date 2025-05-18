@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleMap, Marker, Circle } from '@react-google-maps/api';
+import { GoogleMap, Marker, Circle, useJsApiLoader } from '@react-google-maps/api';
 import type { Coordinate } from '@/services/open-route-service';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
@@ -12,15 +12,17 @@ interface GoogleMapComponentProps {
   onLocationSelected: (location: Coordinate) => void;
   googleMapsApiKey: string;
   searchRadiusKm?: number | null;
-  isLoaded: boolean; // Prop to receive API loading status
-  loadError?: Error | null; // Prop to receive API loading error
-  initialLocation?: Coordinate | null; // Prop for initial location if set by search
+  isLoaded: boolean;
+  loadError?: Error | null;
+  initialLocation?: Coordinate | null;
 }
 
 const defaultCenter: Coordinate = {
   lat: 34.052235, // Los Angeles
   lng: -118.243683,
 };
+
+const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,
@@ -76,7 +78,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     }
 
     if (!isLoaded) {
-      if (showMessages && !loadError) { // Only show "not loaded" if there isn't already a loadError
+      if (showMessages && !loadError) {
          console.warn("getLocation called before Google Maps API is loaded or while there's a load error.");
       }
       setLoading(false);
@@ -120,7 +122,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             });
           }
           setCurrentLocation(defaultCenter);
-          if (!selectedLocation) setSelectedLocation(defaultCenter); // Ensure selectedLocation also defaults
+          if (!selectedLocation) setSelectedLocation(defaultCenter);
           setLoading(false);
           return;
         } else if (permissionStatus.state === 'prompt' && showMessages) {
@@ -148,16 +150,18 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
       const { latitude, longitude } = position.coords;
       const fetchedLocation = { lat: latitude, lng: longitude };
       setCurrentLocation(fetchedLocation);
-       // Only set selectedLocation if it hasn't been set by search or manually
-      if (!selectedLocation || (selectedLocation.lat === defaultCenter.lat && selectedLocation.lng === defaultCenter.lng && showMessages)) {
+      
+      if (showMessages) { // If showMessages is true (e.g., "My Location" button clicked or initial load)
+        setSelectedLocation(fetchedLocation); // Directly update selectedLocation
+        toast({
+          title: "Location Updated",
+          description: "Starting point set to your current location.",
+        });
+      } else if (!selectedLocation) {
+        // Fallback for a silent initial fetch if no location was pre-set
         setSelectedLocation(fetchedLocation);
       }
-      if (showMessages) {
-        toast({
-          title: "Location Detected",
-          description: "Your current location has been set as the starting point.",
-        });
-      }
+
     } catch (err: any) {
       console.error('Error getting location (getCurrentPosition):', err.message, err.code, err.name);
       setError(err.message);
@@ -186,7 +190,6 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
           duration: 10000,
         });
       }
-      // Fallback if no location could be determined or set by search
       if (!currentLocation && !selectedLocation) {
         setCurrentLocation(defaultCenter);
         setSelectedLocation(defaultCenter);
@@ -215,15 +218,13 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   }, [selectedLocation, onLocationSelected]);
 
   useEffect(() => {
-     // If an initialLocation is passed (e.g. from search), use it.
     if (initialLocation) {
       setSelectedLocation(initialLocation);
-      setCurrentLocation(initialLocation); // Also set current to avoid immediate re-fetch if it differs
-      setLoading(false); // Assume API is loaded by parent if initialLocation is present
-    } else if (isLoaded && !loadError) { // Only try to get location if API loaded and no error
-      getLocation(true); // Call with showMessages = true on initial load if no initialLocation
+      setCurrentLocation(initialLocation); 
+      setLoading(false); 
+    } else if (isLoaded && !loadError) { 
+      getLocation(true);
     } else if (loadError) {
-        // Handle API load error explicitly if no initial location
         setError(`Failed to load Google Maps script: ${loadError.message}`);
         toast({ title: "Map Load Error", description: `Google Maps script failed to load: ${loadError.message}. Map functionality may be limited.`, variant: "destructive", duration: 10000 });
         setCurrentLocation(defaultCenter);
@@ -234,7 +235,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 
 
   useEffect(() => {
-    if (!isLoaded || !mapRef.current || loadError) return; // Do not proceed if API not loaded, map not ready, or load error
+    if (!isLoaded || !mapRef.current || loadError) return; 
     const map = mapRef.current;
 
     if (selectedLocation && searchRadiusKm && searchRadiusKm > 0 && google.maps.geometry) {
@@ -291,7 +292,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
     );
   }
   
-  if (!isLoaded && !loadError) { // Show this if still loading and no error yet
+  if (!isLoaded && !loadError) { 
     return (
       <div className="flex flex-col items-center justify-center h-[400px] w-full bg-muted/50 rounded-md text-center p-4">
         <Icons.spinner className="mr-2 h-6 w-6 animate-spin text-primary" />
@@ -349,7 +350,7 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
             size="sm"
             className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm"
             onClick={() => getLocation(true)} 
-            disabled={loading || !isLoaded} // Disable if still loading location or if maps API not loaded
+            disabled={loading || !isLoaded} 
           >
             <Icons.locate className="h-4 w-4 mr-1" /> {loading ? "Locating..." : "My Location"}
           </Button>
@@ -368,4 +369,3 @@ const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
 };
 
 export default GoogleMapComponent;
-
