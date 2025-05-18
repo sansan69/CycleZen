@@ -1,8 +1,9 @@
 
 "use client";
 
-import GoogleMapComponent from "@/components/google-map";
-import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { User } from "firebase/auth";
 import {
@@ -12,10 +13,6 @@ import {
   getDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import Link from "next/link";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-
 
 import { db } from "@/lib/firebase";
 import {
@@ -23,7 +20,9 @@ import {
   signOutUser,
   onAuthUserChanged
 } from "@/lib/firebaseAuthService";
+import { getCyclingRoutes, Coordinate, CyclingRoute } from "@/services/open-route-service";
 
+import GoogleMapComponent from "@/components/google-map";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -391,6 +390,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
+        // Do not set authLoading to false here; keep UI in loading state for auth
         return;
     }
 
@@ -399,7 +399,7 @@ const HomePage = () => {
 
     const unsubscribe = onAuthUserChanged((user) => {
       setCurrentUser(user);
-      setAuthLoading(false);
+      setAuthLoading(false); // Auth state is now known
       if (user) {
         console.log("page.tsx onAuthUserChanged: User signed in:", user.uid);
       } else {
@@ -433,20 +433,24 @@ const HomePage = () => {
           } else {
             console.log(`[handleGoogleSignIn] Existing user with profile. No redirect needed from here.`);
             toast({ title: "Signed In", description: "Successfully signed in with Google." });
+            // onAuthUserChanged will handle setting currentUser and authLoading=false
           }
         } else {
           console.warn("[handleGoogleSignIn] User signed in, but DB instance was not available for profile check.");
           toast({ title: "Signed In", description: "Successfully signed in with Google (DB unavailable for profile check)." });
+          // onAuthUserChanged will handle setting currentUser and authLoading=false
         }
       } else {
         console.warn("[handleGoogleSignIn] signInWithGoogle returned null, no user object from service.");
+        setAuthLoading(false); // If sign-in fails early or returns null
       }
     } catch (error: any) {
       console.error("[handleGoogleSignIn] Error from signInWithGoogle service or subsequent logic:", error);
       const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-      let hostnameToAdd = 'localhost';
+      let hostnameToAdd = 'localhost'; // Default
        try {
-          hostnameToAdd = new URL(currentOrigin).hostname;
+          const url = new URL(currentOrigin);
+          hostnameToAdd = url.hostname;
         } catch(e) {
           console.warn("Could not parse hostname from currentOrigin", currentOrigin);
           hostnameToAdd = currentOrigin; // Fallback to full origin if parsing fails
@@ -473,9 +477,9 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-    } finally {
-      setAuthLoading(false); 
-    }
+      setAuthLoading(false); // Ensure authLoading is set to false on error
+    } 
+    // No finally block for setAuthLoading(false) here, as successful sign-in should rely on onAuthUserChanged
   };
 
   const handleSignOut = async () => {
@@ -542,7 +546,7 @@ const HomePage = () => {
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false);
         if (searchInputRef.current) {
-          searchInputRef.current.value = '';
+          searchInputRef.current.value = ''; // Clear search input
         }
         toast({
           title: "Routes Generated",
@@ -813,6 +817,7 @@ const HomePage = () => {
                   isLoaded={isLoaded}
                   loadError={loadError}
                   initialLocation={selectedLocation}
+                  googleMapsApiKey={googleMapsApiKey}
                 />
               </div>
             )}
