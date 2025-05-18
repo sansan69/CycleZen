@@ -122,9 +122,9 @@ const RouteDisplay = ({
     elapsedTime: number;
     route: CyclingRoute;
     actualDistanceCoveredKm?: number;
+    estimatedCalories: string;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
-  // const rideSummaryContentRef = useRef<HTMLDivElement>(null); // Temporarily removed
 
 
   const mapStyles = {
@@ -263,10 +263,9 @@ const RouteDisplay = ({
       const routeDataToSave: any = {
         distance: route.distance,
         estimatedTime: route.estimatedTime,
-        coordinates: route.coordinates, // This is an array of {lat, lng} objects
+        coordinates: route.coordinates, 
       };
       
-      // Only include ascent if it's a valid number
       if (route.ascent !== undefined && isFinite(route.ascent)) {
         routeDataToSave.ascent = route.ascent;
       }
@@ -411,13 +410,47 @@ const RouteDisplay = ({
     setRideSummaryData({ 
         elapsedTime, 
         route,
-        actualDistanceCoveredKm 
+        actualDistanceCoveredKm,
+        estimatedCalories: estimateCaloriesBurned(actualDistanceCoveredKm ?? route.distance)
     });
     setShowRideSummaryDialog(true);
   };
 
-  // const handleShareAsImage = async () => { // Temporarily removed
-  // };
+  const handleSaveCompletedRide = async () => {
+    if (!user || !user.uid || !rideSummaryData) {
+      toast({
+        title: "Error",
+        description: "User not logged in or no ride data to save.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!db) {
+      toast({ title: "Database Error", description: "Firestore not available.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const completedRidesCollection = collection(db, "users", user.uid, "completedRides");
+      const rideDataToSave = {
+        routeName: `Ride near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected area'} on ${new Date().toLocaleDateString()}`,
+        completedAt: serverTimestamp(),
+        actualDurationSeconds: rideSummaryData.elapsedTime,
+        plannedDistanceKm: rideSummaryData.route.distance,
+        actualDistanceCoveredKm: rideSummaryData.actualDistanceCoveredKm,
+        estimatedCalories: rideSummaryData.estimatedCalories,
+        routeCoordinates: rideSummaryData.route.coordinates,
+        ascent: rideSummaryData.route.ascent,
+        // steps: rideSummaryData.route.steps, // Steps can be quite large, consider if truly needed here
+      };
+      
+      await addDoc(completedRidesCollection, rideDataToSave);
+      toast({ title: "Ride Saved", description: "Your completed ride has been saved to your dashboard." });
+    } catch (error: any) {
+      console.error("Error saving completed ride:", error);
+      toast({ title: "Save Error", description: "Failed to save completed ride.", variant: "destructive" });
+    }
+  };
 
 
   if (!center && !(route.coordinates && route.coordinates.length > 0)) {
@@ -581,7 +614,6 @@ const RouteDisplay = ({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Ride Summary Dialog */}
       <AlertDialog open={showRideSummaryDialog} onOpenChange={setShowRideSummaryDialog}>
         <AlertDialogContent className="max-w-lg w-full">
           <AlertDialogHeader>
@@ -591,7 +623,7 @@ const RouteDisplay = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {rideSummaryData && (
-            <div /* ref={rideSummaryContentRef} Temporarily removed */ className="space-y-4 my-4 p-4 bg-background rounded"> {/* Added ref and padding for capture */}
+            <div className="space-y-4 my-4 p-4 bg-background rounded">
               <div className="h-64 w-full rounded-md overflow-hidden border border-border">
                 {googleMapsApiKey ? (
                   <GoogleMap
@@ -642,7 +674,7 @@ const RouteDisplay = ({
 
                 <div>
                   <p className="text-2xl font-bold text-primary">
-                    {estimateCaloriesBurned(rideSummaryData.actualDistanceCoveredKm ?? rideSummaryData.route.distance)}
+                    {rideSummaryData.estimatedCalories}
                   </p>
                   <p className="text-sm text-muted-foreground">Est. Calories</p>
                 </div>
@@ -657,15 +689,26 @@ const RouteDisplay = ({
             </div>
           )}
           <AlertDialogFooter>
-            {/* <Button variant="outline" onClick={handleShareAsImage} className="mr-auto"> // Temporarily removed
-            </Button> */}
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                handleSaveCompletedRide();
+                setShowRideSummaryDialog(false);
+                setRideSummaryData(null); 
+                setElapsedTime(0); 
+                setRideStartActualLocation(null); 
+              }}
+              disabled={!user || !rideSummaryData}
+            >
+              Save Ride & Done
+            </Button>
             <AlertDialogAction onClick={() => {
               setShowRideSummaryDialog(false);
               setRideSummaryData(null); 
               setElapsedTime(0); 
               setRideStartActualLocation(null); 
             }}>
-              Done
+              Done (Don't Save)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -673,7 +716,6 @@ const RouteDisplay = ({
     </Card>
   );
 };
-
 
 const HomePage = () => {
   const [radius, setRadius] = useState<string>("5");
@@ -696,7 +738,7 @@ const HomePage = () => {
     if (typeof window !== 'undefined') {
       const hasSeenPrompt = localStorage.getItem('hasSeenPWAInstallPrompt');
       if (!hasSeenPrompt) {
-        setShowPWAInstallInstructions(true);
+        // setShowPWAInstallInstructions(true); // Replaced by PWAInstallPrompt component
       }
     }
   }, []);
@@ -741,7 +783,7 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // setAuthLoading(false); // Let onAuthUserChanged handle this
+        setAuthLoading(false); 
         return;
     }
 
@@ -832,7 +874,9 @@ const HomePage = () => {
       } else {
         toast({ title: "Sign-in Error", description: `Code: ${error.code || 'N/A'}. Message: ${error.message || 'Failed to sign in.'}`, variant: "destructive", duration: 10000 });
       }
-    } 
+    } finally {
+      // setAuthLoading(false); // onAuthUserChanged handles this generally
+    }
   };
 
   const handleSignOut = async () => {
@@ -1048,10 +1092,15 @@ const HomePage = () => {
           </div>
         ) : currentUser ? (
            <div className="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] items-center gap-3 w-full">
-            <div className="w-full sm:w-auto order-1 sm:order-1 sm:justify-self-start">
+            <div className="w-full sm:w-auto order-1 sm:order-1 sm:justify-self-start flex gap-2">
               <Link href="/saved-routes" passHref>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full sm:w-auto">
                   <Icons.list className="mr-2 h-4 w-4" /> My Saved Routes
+                </Button>
+              </Link>
+              <Link href="/dashboard" passHref>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <Icons.dashboard className="mr-2 h-4 w-4" /> Dashboard
                 </Button>
               </Link>
             </div>
@@ -1229,3 +1278,4 @@ const HomePage = () => {
 export default HomePage;
 
       
+
