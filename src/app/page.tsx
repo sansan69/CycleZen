@@ -49,7 +49,7 @@ import {
   Polyline,
   Autocomplete,
   useJsApiLoader,
-  Marker, // Added Marker
+  Marker,
 } from "@react-google-maps/api";
 
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
@@ -65,14 +65,13 @@ const RouteDisplay = ({
 }) => {
   const { toast } = useToast();
   const [center, setCenter] = useState<Coordinate | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null); // Ref for map instance
+  const mapRef = useRef<google.maps.Map | null>(null); 
 
   const mapStyles = {
     height: "300px",
     width: "100%",
   };
 
-  // Calculate initial center of the route
   useEffect(() => {
     if (route.coordinates && route.coordinates.length > 0) {
       const latitudes = route.coordinates.map(p => p.lat);
@@ -90,7 +89,6 @@ const RouteDisplay = ({
     }
   }, [route]);
 
-  // Fit map bounds to the route polyline
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     if (route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
@@ -102,7 +100,6 @@ const RouteDisplay = ({
     }
   }, [route.coordinates]);
 
-  // Re-fit bounds if route coordinates change after map is loaded
   useEffect(() => {
     if (mapRef.current && route.coordinates && route.coordinates.length > 0 && google.maps.LatLngBounds) {
       const bounds = new google.maps.LatLngBounds();
@@ -195,7 +192,6 @@ const RouteDisplay = ({
         estimatedTime: route.estimatedTime,
         ascent: route.ascent,
         coordinates: route.coordinates,
-        // Do NOT save route.geometry here as it causes Firestore nested array errors
       };
 
       await addDoc(userSavedRoutesCollection, {
@@ -242,7 +238,7 @@ const RouteDisplay = ({
   };
 
 
-  if (!center && !(route.coordinates && route.coordinates.length > 0)) { // Show skeleton if no center and no coords to fit yet
+  if (!center && !(route.coordinates && route.coordinates.length > 0)) { 
     return <Skeleton className="h-[400px] w-full" />;
   }
 
@@ -286,14 +282,13 @@ const RouteDisplay = ({
           <div className="rounded-md overflow-hidden border border-border">
             <GoogleMap 
               mapContainerStyle={mapStyles} 
-              center={mapInitialCenter} // Use initial center
-              // zoom prop removed, fitBounds will handle zoom
+              center={mapInitialCenter} 
               options={{ 
                 streetViewControl: false, 
                 mapTypeControl: false, 
-                fullscreenControl: true // Enabled fullscreen control
+                fullscreenControl: true 
               }}
-              onLoad={onMapLoad} // Use the onLoad callback
+              onLoad={onMapLoad} 
             >
               {route.coordinates && route.coordinates.length > 0 && (
                 <>
@@ -327,7 +322,7 @@ const RouteDisplay = ({
             disabled={!user || !user.uid} 
             className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
           >
-            <Icons.plusCircle className="mr-2 h-4 w-4" /> Save this route
+            <Icons.bookmark className="mr-2 h-4 w-4" /> Save this route
           </Button>
         </div>
       </CardFooter>
@@ -401,7 +396,6 @@ const HomePage = () => {
         const message = `Critical Firebase config missing: ${missingVars.join(", ")}. Authentication will be unavailable. Please check your .env.local file and restart the server.`;
         toast({ title: "Configuration Error", description: message, variant: "destructive", duration: Infinity });
         console.error(`CRITICAL from page.tsx: ${message}`);
-        // authLoading remains true, disabling login buttons
         return; 
     }
     
@@ -514,7 +508,7 @@ const HomePage = () => {
       if (generatedRoutes && generatedRoutes.length > 0) {
         setShowMapInput(false); 
         if (searchInputRef.current) {
-          searchInputRef.current.value = ''; // Reset search input
+          searchInputRef.current.value = ''; 
         }
         toast({
           title: "Routes Generated",
