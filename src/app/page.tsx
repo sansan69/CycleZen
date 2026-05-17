@@ -698,6 +698,7 @@ const HomePage = () => {
   const router = useRouter();
 
   const { isLoaded, loadError, googleMapsApiKey } = useGoogleMaps();
+  const { isDarkMode, toggleDarkMode } = useAppStore();
 
   const capitalizeName = (name: string | null | undefined): string => {
     if (!name) return "";
@@ -1031,6 +1032,9 @@ const HomePage = () => {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Button variant="ghost" size="sm" onClick={toggleDarkMode} className="p-2 ml-1">
+                {isDarkMode ? <Icons.moon className="h-4 w-4" /> : <Icons.light className="h-4 w-4" />}
+              </Button>
            </div>
         ) : (
           <div className="flex justify-center items-center py-2">
