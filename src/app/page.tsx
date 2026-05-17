@@ -31,8 +31,8 @@ import {
   signInWithGoogle,
   signOutUser,
   onAuthUserChanged
-} from "@/lib/firebaseAuthService";
-import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/services/open-route-service";
+} from "@/features/auth/services/auth-service";
+import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/features/route-generation/services/open-route-service";
 import { formatDuration, estimateCalories } from "@/shared/lib/utils";
 
 import {

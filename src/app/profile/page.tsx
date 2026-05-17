@@ -10,7 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
 import { db } from "@/lib/firebase";
-import { onAuthUserChanged } from "@/lib/firebaseAuthService";
+import { onAuthUserChanged } from "@/features/auth/services/auth-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

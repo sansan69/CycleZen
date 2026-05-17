@@ -22,8 +22,8 @@ import {
 } from "@react-google-maps/api";
 
 import { db } from "@/lib/firebase";
-import { onAuthUserChanged } from "@/lib/firebaseAuthService";
-import type { RouteStep } from "@/services/open-route-service"; // Import RouteStep
+import { onAuthUserChanged } from "@/features/auth/services/auth-service";
+import type { RouteStep } from "@/features/route-generation/services/open-route-service"; // Import RouteStep
 
 import {
   AlertDialog,

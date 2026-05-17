@@ -19,8 +19,8 @@ import {
 } from "@react-google-maps/api";
 
 import { db } from "@/lib/firebase";
-import { onAuthUserChanged } from "@/lib/firebaseAuthService";
-import type { Coordinate } from "@/services/open-route-service";
+import { onAuthUserChanged } from "@/features/auth/services/auth-service";
+import type { Coordinate } from "@/features/route-generation/services/open-route-service";
 import { formatDuration } from "@/shared/lib/utils"; 
 
 import {
