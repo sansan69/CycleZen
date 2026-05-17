@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleMap, Marker, Circle, Autocomplete, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, Marker, Circle, Autocomplete } from '@react-google-maps/api';
 import type { Coordinate } from '@/features/route-generation/services/open-route-service';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
@@ -21,10 +21,6 @@ const defaultCenter: Coordinate = {
   lat: 34.052235, // Los Angeles
   lng: -118.243683,
 };
-
-// Moved outside the component to ensure stable reference
-const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places'|'geometry')[];
-
 
 const GoogleMapComponent: React.FC<GoogleMapComponentProps> = ({
   onLocationSelected,

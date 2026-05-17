@@ -18,12 +18,12 @@ import {
   GoogleMap,
   Polyline,
   Marker,
-  useJsApiLoader,
 } from "@react-google-maps/api";
 
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/features/auth/services/auth-service";
 import type { RouteStep } from "@/features/route-generation/services/open-route-service"; // Import RouteStep
+import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
 import {
   AlertDialog,
@@ -86,12 +86,6 @@ interface SavedRouteDoc {
   notes?: string;
 }
 
-const GOOGLE_MAPS_LIBRARIES = ["places", "geometry"] as (
-  | "places"
-  | "geometry"
-)[];
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
 const SavedRoutesPage = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRouteDoc[]>([]);
@@ -107,11 +101,7 @@ const SavedRoutesPage = () => {
   const [editedRouteName, setEditedRouteName] = useState("");
   const [editedRouteNotes, setEditedRouteNotes] = useState("");
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script", 
-    googleMapsApiKey: googleMapsApiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  });
+  const { isLoaded, loadError, googleMapsApiKey } = useGoogleMaps();
 
   useEffect(() => {
     const unsubscribe = onAuthUserChanged((user) => {

@@ -20,7 +20,6 @@ import {
   Polyline,
   Marker,
   Autocomplete,
-  useJsApiLoader,
   Circle,
 } from "@react-google-maps/api";
 import html2canvas from 'html2canvas';
@@ -34,6 +33,7 @@ import {
 } from "@/features/auth/services/auth-service";
 import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/features/route-generation/services/open-route-service";
 import { formatDuration, estimateCalories } from "@/shared/lib/utils";
+import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
 import {
   AlertDialog,
@@ -74,9 +74,6 @@ import { useToast } from "@/hooks/use-toast";
 import GoogleMapComponent from "@/components/google-map";
 
 
-const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
 const RouteDisplay = ({
   route,
   user,
@@ -89,6 +86,7 @@ const RouteDisplay = ({
   routeIndex: number;
 }) => {
   const { toast } = useToast();
+  const { googleMapsApiKey } = useGoogleMaps();
   const mapRef = useRef<google.maps.Map | null>(null);
   const rideSummaryContentRef = useRef<HTMLDivElement>(null);
 
@@ -690,11 +688,7 @@ const HomePage = () => {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const router = useRouter();
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: googleMapsApiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  });
+  const { isLoaded, loadError, googleMapsApiKey } = useGoogleMaps();
 
   const capitalizeName = (name: string | null | undefined): string => {
     if (!name) return "";

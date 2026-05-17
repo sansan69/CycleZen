@@ -15,13 +15,13 @@ import {
   GoogleMap,
   Polyline,
   Marker,
-  useJsApiLoader,
 } from "@react-google-maps/api";
 
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/features/auth/services/auth-service";
 import type { Coordinate } from "@/features/route-generation/services/open-route-service";
 import { formatDuration } from "@/shared/lib/utils"; 
+import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
 import {
   Card,
@@ -53,12 +53,6 @@ interface CompletedRideDoc extends CompletedRideData {
   id: string;
 }
 
-const GOOGLE_MAPS_LIBRARIES = ["places", "geometry"] as (
-  | "places"
-  | "geometry"
-)[];
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
 const DashboardPage = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [completedRides, setCompletedRides] = useState<CompletedRideDoc[]>([]);
@@ -71,11 +65,7 @@ const DashboardPage = () => {
   });
   const { toast } = useToast();
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script", 
-    googleMapsApiKey: googleMapsApiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  });
+  const { isLoaded, loadError, googleMapsApiKey } = useGoogleMaps();
 
   useEffect(() => {
     const unsubscribe = onAuthUserChanged((user) => {
