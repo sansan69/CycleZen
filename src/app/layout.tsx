@@ -2,6 +2,7 @@
 import type {Metadata, Viewport} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
+import { Providers } from '@/shared/components/Providers';
 import PWALoader from '@/components/pwa-loader';
 import PWAInstallPrompt from '@/components/pwa-install-prompt';
 
@@ -48,9 +49,11 @@ export default function RootLayout({
         <link rel="preconnect" href="https://maps.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-secondary text-foreground`}>
-        <PWALoader />
-        <PWAInstallPrompt />
-        {children}
+        <Providers>
+          <PWALoader />
+          <PWAInstallPrompt />
+          {children}
+        </Providers>
       </body>
     </html>
   );

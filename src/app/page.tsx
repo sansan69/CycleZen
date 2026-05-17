@@ -32,8 +32,10 @@ import {
   onAuthUserChanged
 } from "@/features/auth/services/auth-service";
 import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/features/route-generation/services/open-route-service";
+import { downloadGpx } from "@/features/route-generation/services/gpx-service";
+import { detectSurfaceType } from "@/features/route-generation/services/surface-service";
 import { WeatherWidget } from "@/features/weather";
-import { formatDuration, estimateCalories } from "@/shared/lib/utils";
+import { formatDuration, estimateCalories, classifyDifficulty } from "@/shared/lib/utils";
 import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
 import {
@@ -73,6 +75,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
 import GoogleMapComponent from "@/components/google-map";
+import { useAppStore } from "@/stores";
 
 
 const RouteDisplay = ({
@@ -442,8 +445,10 @@ const RouteDisplay = ({
           </div>
         </div>
         <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
-          <p>Difficulty: Moderate (est.)</p>
-          <p>Route Type: Primarily Road</p>
+          <p>Difficulty: {classifyDifficulty(route.ascent ?? 0, route.distance)}</p>
+          {route.steps && (
+            <p>Route Type: {detectSurfaceType(route.ascent ?? 0, route.distance, route.steps.length)}</p>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -542,6 +547,9 @@ const RouteDisplay = ({
         <div className="flex gap-2 flex-wrap justify-center sm:justify-end">
           <Button onClick={handleShareRoute} variant="outline" className="hover:bg-secondary/80">
             <Icons.share className="mr-2 h-4 w-4" /> Share
+          </Button>
+          <Button onClick={() => downloadGpx(route.coordinates, `Route ${routeIndex + 1}`, route.ascent)} variant="outline" size="sm">
+            <Icons.download className="mr-1 h-4 w-4" /> GPX
           </Button>
           <Button
             onClick={handleSaveRoute}

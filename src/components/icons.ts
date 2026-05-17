@@ -17,6 +17,7 @@ const Icons = {
   home: Home,
   list: List,
   light: Sun,
+  moon: Moon,
   loader: Loader2,
   locate: Locate,
   mail: Mail,
