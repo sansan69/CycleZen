@@ -32,6 +32,7 @@ import {
   onAuthUserChanged
 } from "@/features/auth/services/auth-service";
 import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/features/route-generation/services/open-route-service";
+import { WeatherWidget } from "@/features/weather";
 import { formatDuration, estimateCalories } from "@/shared/lib/utils";
 import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
@@ -1141,6 +1142,10 @@ const HomePage = () => {
                   Change location
                 </Button>
               </div>
+            )}
+
+            {selectedLocation && (
+              <WeatherWidget location={selectedLocation} />
             )}
           </CardContent>
           <CardFooter className="pt-6">
