@@ -213,7 +213,9 @@ export const RouteCard = React.memo(function RouteCard({
     } catch (error: any) {
       console.error("Error saving route:", error);
       let description = "Failed to save route. Please try again.";
-      if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
+      if (error.code === 'permission-denied' || error.message?.toLowerCase().includes('permission-denied')) {
+        description = "Permission denied. Firestore security rules may need to be deployed. Run: firebase deploy --only firestore:rules";
+      } else if (error.message && error.message.toLowerCase().includes("nested arrays are not supported")) {
         description = "Failed to save route: The route data contains a structure not supported by the database (nested arrays).";
       } else if (error.message && error.message.toLowerCase().includes("unsupported field value: undefined")) {
         description = "Failed to save route: The route data contains an undefined value that cannot be stored.";
@@ -377,7 +379,11 @@ export const RouteCard = React.memo(function RouteCard({
       toast({ title: "Ride Saved", description: "Your completed ride has been saved to your dashboard." });
     } catch (error: any) {
       console.error("Error saving completed ride:", error);
-      toast({ title: "Save Error", description: "Failed to save completed ride.", variant: "destructive" });
+      let description = "Failed to save completed ride.";
+      if (error.code === 'permission-denied' || error.message?.toLowerCase().includes('permission-denied')) {
+        description = "Permission denied. Deploy Firestore rules: firebase deploy --only firestore:rules";
+      }
+      toast({ title: "Save Error", description, variant: "destructive" });
     }
   };
 
