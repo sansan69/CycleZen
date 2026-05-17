@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback, useRef, ChangeEvent } from "react";
 import type { User } from "firebase/auth";
 import {
@@ -34,7 +35,10 @@ import {
 import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/features/route-generation/services/open-route-service";
 import { downloadGpx } from "@/features/route-generation/services/gpx-service";
 import { detectSurfaceType } from "@/features/route-generation/services/surface-service";
-import { WeatherWidget } from "@/features/weather";
+const WeatherWidget = dynamic(
+  () => import("@/features/weather").then(mod => ({ default: mod.WeatherWidget })),
+  { ssr: false }
+);
 import { formatDuration, estimateCalories, classifyDifficulty } from "@/shared/lib/utils";
 import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
@@ -74,7 +78,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/toaster";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
-import GoogleMapComponent from "@/components/google-map";
+const GoogleMapComponent = dynamic(
+  () => import("@/components/google-map"),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center h-[400px] w-full bg-muted/50 rounded-md">
+        <Icons.spinner className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
 import { useAppStore } from "@/stores";
 
 

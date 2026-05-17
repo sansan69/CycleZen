@@ -1,6 +1,7 @@
 
 import type {Metadata, Viewport} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
+import { Suspense } from 'react';
 import './globals.css';
 import { Providers } from '@/shared/components/Providers';
 import PWALoader from '@/components/pwa-loader';
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json', 
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "CycleZen",
   },
   formatDetection: {
@@ -45,14 +46,21 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="preconnect" href="https://maps.googleapis.com" />
         <link rel="preconnect" href="https://maps.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-secondary text-foreground`}>
         <Providers>
-          <PWALoader />
-          <PWAInstallPrompt />
-          {children}
+          <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen bg-secondary">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+          }>
+            <PWALoader />
+            <PWAInstallPrompt />
+            {children}
+          </Suspense>
         </Providers>
       </body>
     </html>
