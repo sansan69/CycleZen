@@ -23,9 +23,6 @@ import {
   Autocomplete,
   Circle,
 } from "@react-google-maps/api";
-import html2canvas from 'html2canvas';
-
-
 import { db } from "@/lib/firebase";
 import {
   signInWithGoogle,
