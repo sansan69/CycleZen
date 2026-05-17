@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icons } from "@/components/icons";
+import { EmptyState } from "@/shared/components/EmptyState";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
@@ -226,15 +227,11 @@ const DashboardPage = () => {
             )}
 
             {!loadingRides && completedRides.length === 0 && (
-              <div className="text-center py-10 bg-card rounded-lg shadow">
-                <Icons.bike className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <p className="text-xl text-muted-foreground">
-                  No completed rides yet.
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Go find some routes and start riding!
-                </p>
-              </div>
+              <EmptyState
+                icon="bike"
+                title="No completed rides yet."
+                description="Go find some routes and start riding!"
+              />
             )}
 
             {!loadingRides && completedRides.length > 0 && (

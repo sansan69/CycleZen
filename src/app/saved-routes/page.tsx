@@ -59,6 +59,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icons } from "@/components/icons";
+import { EmptyState } from "@/shared/components/EmptyState";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
@@ -357,15 +358,11 @@ const SavedRoutesPage = () => {
           )}
 
           {!loadingRoutes && savedRoutes.length === 0 && (
-            <div className="text-center py-10">
-              <Icons.list className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <p className="text-xl text-muted-foreground">
-                No saved routes yet.
-              </p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Go back to the homepage to generate and save new routes!
-              </p>
-            </div>
+            <EmptyState
+              icon="list"
+              title="No saved routes yet."
+              description="Go back to the homepage to generate and save new routes!"
+            />
           )}
 
           {!loadingRoutes && savedRoutes.length > 0 && (
