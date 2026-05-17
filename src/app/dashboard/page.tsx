@@ -20,7 +20,8 @@ import {
 
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/lib/firebaseAuthService";
-import type { Coordinate } from "@/services/open-route-service"; 
+import type { Coordinate } from "@/services/open-route-service";
+import { formatDuration } from "@/shared/lib/utils"; 
 
 import {
   Card,
@@ -42,7 +43,7 @@ interface CompletedRideData {
   actualDurationSeconds: number;
   plannedDistanceKm: number;
   actualDistanceCoveredKm?: number;
-  estimatedCalories: string;
+  estimatedCalories: number;
   routeCoordinates: Coordinate[];
   ascent?: number;
 }
@@ -56,17 +57,6 @@ const GOOGLE_MAPS_LIBRARIES = ["places", "geometry"] as (
   | "geometry"
 )[];
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
-const formatTime = (seconds: number): string => {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return [
-    h > 0 ? h.toString().padStart(2, '0') : null,
-    m.toString().padStart(2, '0'),
-    s.toString().padStart(2, '0'),
-  ].filter(Boolean).join(':');
-};
 
 const DashboardPage = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -220,7 +210,7 @@ const DashboardPage = () => {
                   <CardTitle className="text-primary text-lg">Total Time Riding</CardTitle>
                 </CardHeader>
                 <CardContent>
-                   {loadingRides ? <Skeleton className="h-8 w-1/2" /> : <p className="text-3xl font-bold">{formatTime(stats.totalDurationSeconds)}</p>}
+                   {loadingRides ? <Skeleton className="h-8 w-1/2" /> : <p className="text-3xl font-bold">{formatDuration(stats.totalDurationSeconds)}</p>}
                 </CardContent>
               </Card>
             </div>
@@ -261,7 +251,7 @@ const DashboardPage = () => {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                         <div>
                           <p className="font-medium text-foreground">Duration</p>
-                          <p className="text-muted-foreground">{formatTime(ride.actualDurationSeconds)}</p>
+                          <p className="text-muted-foreground">{formatDuration(ride.actualDurationSeconds)}</p>
                         </div>
                         <div>
                           <p className="font-medium text-foreground">Distance</p>
@@ -271,7 +261,7 @@ const DashboardPage = () => {
                         </div>
                         <div>
                           <p className="font-medium text-foreground">Est. Calories</p>
-                          <p className="text-muted-foreground">{ride.estimatedCalories}</p>
+                          <p className="text-muted-foreground">{ride.estimatedCalories.toLocaleString()}</p>
                         </div>
                          {ride.ascent !== undefined && isFinite(ride.ascent) && (
                             <div>

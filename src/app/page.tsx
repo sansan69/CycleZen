@@ -33,6 +33,7 @@ import {
   onAuthUserChanged
 } from "@/lib/firebaseAuthService";
 import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/services/open-route-service";
+import { formatDuration, estimateCalories } from "@/shared/lib/utils";
 
 import {
   AlertDialog,
@@ -76,28 +77,6 @@ import GoogleMapComponent from "@/components/google-map";
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'] as ('places' | 'geometry')[];
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
-const formatTime = (seconds: number): string => {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return [
-    h > 0 ? h.toString().padStart(2, '0') : null,
-    m.toString().padStart(2, '0'),
-    s.toString().padStart(2, '0'),
-  ].filter(Boolean).join(':');
-};
-
-const estimateCaloriesBurned = (distanceKm: number | undefined): string => {
-  if (typeof distanceKm !== 'number' || !isFinite(distanceKm) || distanceKm <= 0) {
-    return 'N/A';
-  }
-  // Very rough estimate: ~60 calories per km for moderate cycling.
-  // This can vary wildly based on intensity, rider weight, terrain, etc.
-  const calories = Math.round(distanceKm * 60);
-  return calories.toLocaleString();
-};
-
-
 const RouteDisplay = ({
   route,
   user,
@@ -131,7 +110,7 @@ const RouteDisplay = ({
     elapsedTime: number;
     route: CyclingRoute;
     actualDistanceCoveredKm?: number;
-    estimatedCalories: string;
+    estimatedCalories: number;
   } | null>(null);
   const mapRefSummary = useRef<google.maps.Map | null>(null);
 
@@ -388,7 +367,7 @@ const RouteDisplay = ({
         elapsedTime, 
         route,
         actualDistanceCoveredKm,
-        estimatedCalories: estimateCaloriesBurned(actualDistanceCoveredKm ?? route.distance)
+        estimatedCalories: estimateCalories(actualDistanceCoveredKm ?? route.distance)
     });
     setShowRideSummaryDialog(true);
   };
@@ -519,7 +498,7 @@ const RouteDisplay = ({
             <div className="mt-4 p-3 bg-muted rounded-md border border-border">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="text-lg font-semibold text-primary">Ride Active</h3>
-                    <p className="text-xl font-bold text-foreground">{formatTime(elapsedTime)}</p>
+                    <p className="text-xl font-bold text-foreground">{formatDuration(elapsedTime)}</p>
                 </div>
                 <div className="flex gap-2 mt-2">
                     <Button onClick={handlePauseResumeRide} variant="outline" className="flex-1">
@@ -632,7 +611,7 @@ const RouteDisplay = ({
               </div>
               <div className="grid grid-cols-1 gap-4 text-center pt-2">
                 <div>
-                  <p className="text-2xl font-bold text-primary">{formatTime(rideSummaryData.elapsedTime)}</p>
+                  <p className="text-2xl font-bold text-primary">{formatDuration(rideSummaryData.elapsedTime)}</p>
                   <p className="text-sm text-muted-foreground">Duration</p>
                 </div>
                 
@@ -650,7 +629,7 @@ const RouteDisplay = ({
 
                 <div>
                   <p className="text-2xl font-bold text-primary">
-                    {rideSummaryData.estimatedCalories}
+                    {rideSummaryData.estimatedCalories.toLocaleString()}
                   </p>
                   <p className="text-sm text-muted-foreground">Est. Calories</p>
                 </div>
