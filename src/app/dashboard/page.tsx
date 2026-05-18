@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { User } from "firebase/auth";
 import {
   collection,
@@ -20,8 +20,18 @@ import {
 import { db } from "@/lib/firebase";
 import { onAuthUserChanged } from "@/features/auth/services/auth-service";
 import type { Coordinate } from "@/features/route-generation/services/open-route-service";
-import { formatDuration } from "@/shared/lib/utils"; 
+import { formatDuration } from "@/shared/lib/utils";
+import {
+  estimateFTP,
+  calculateWeeklyLoad,
+  buildTrainingLoadData,
+  type CompletedRide,
+  type WeeklyLoadResult,
+  type TrainingLoadData,
+} from "@/shared/lib/training";
+import { TrainingLoadChart } from "@/features/dashboard/components/TrainingLoadChart";
 import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 import {
   Card,
@@ -37,6 +47,9 @@ import { Icons } from "@/components/icons";
 import { EmptyState } from "@/shared/components/EmptyState";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
+import { AchievementsList } from "@/features/achievements";
+import { fetchAchievements } from "@/features/achievements";
+import type { Achievement } from "@/features/achievements";
 
 interface CompletedRideData {
   routeName: string;
@@ -63,6 +76,8 @@ const DashboardPage = () => {
     totalDistance: 0,
     totalDurationSeconds: 0,
   });
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [loadingAchievements, setLoadingAchievements] = useState<boolean>(true);
   const { toast } = useToast();
 
   const { isLoaded, loadError, googleMapsApiKey } = useGoogleMaps();
@@ -121,6 +136,25 @@ const DashboardPage = () => {
     }
   }, [currentUser, authLoading, toast]);
 
+  // Fetch achievements
+  useEffect(() => {
+    if (currentUser) {
+      setLoadingAchievements(true);
+      fetchAchievements(currentUser.uid)
+        .then((data) => {
+          setAchievements(data);
+          setLoadingAchievements(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching achievements:", error);
+          setLoadingAchievements(false);
+        });
+    } else if (!currentUser && !authLoading) {
+      setLoadingAchievements(false);
+      setAchievements([]);
+    }
+  }, [currentUser, authLoading]);
+
   const onMapLoad = useCallback((map: google.maps.Map, coordinates: Coordinate[]) => {
     if (coordinates && coordinates.length > 0 && google.maps.LatLngBounds) {
       const bounds = new google.maps.LatLngBounds();
@@ -135,6 +169,35 @@ const DashboardPage = () => {
     height: "200px",
     width: "100%",
   };
+
+  // ── Training Metrics ──────────────────────────────────
+  const trainingLoadData = useMemo<TrainingLoadData[]>(() => {
+    if (!completedRides.length) return [];
+    return buildTrainingLoadData(completedRides as CompletedRide[], 14);
+  }, [completedRides]);
+
+  const ftp = useMemo(() => {
+    if (!completedRides.length) return 0;
+    return estimateFTP(completedRides as CompletedRide[]);
+  }, [completedRides]);
+
+  const weeklyLoad = useMemo<WeeklyLoadResult>(() => {
+    if (!completedRides.length) {
+      return { load: 0, trend: "→", trendLabel: "stable", recommendation: "" };
+    }
+    return calculateWeeklyLoad(completedRides as CompletedRide[], ftp);
+  }, [completedRides, ftp]);
+
+  const trendIcon = useMemo(() => {
+    switch (weeklyLoad.trend) {
+      case "↑":
+        return <TrendingUp className="h-5 w-5 text-green-500" />;
+      case "↓":
+        return <TrendingDown className="h-5 w-5 text-red-500" />;
+      default:
+        return <Minus className="h-5 w-5 text-yellow-500" />;
+    }
+  }, [weeklyLoad.trend]);
 
   if (authLoading) {
     return (
@@ -176,6 +239,14 @@ const DashboardPage = () => {
         </header>
 
         <main className="container mx-auto max-w-4xl">
+          {/* Achievements Section */}
+          <section className="mb-8">
+            <AchievementsList
+              achievements={achievements}
+              loading={loadingAchievements}
+            />
+          </section>
+
           {/* Stats Section */}
           <section className="mb-8">
             <h2 className="text-2xl font-semibold text-foreground mb-4">Overall Statistics</h2>
@@ -289,6 +360,107 @@ const DashboardPage = () => {
                   </Card>
                 ))}
               </div>
+            )}
+          </section>
+
+          {/* Training Metrics Section */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-semibold text-foreground mb-4">Training Metrics</h2>
+            {loadingRides ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Skeleton className="h-[200px] w-full rounded-lg" />
+                <Skeleton className="h-[200px] w-full rounded-lg" />
+              </div>
+            ) : completedRides.length === 0 ? (
+              <EmptyState
+                icon="activity"
+                title="Need more rides"
+                description="Complete some rides to unlock training metrics and load tracking."
+              />
+            ) : (
+              <>
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {/* FTP Estimate */}
+                  <Card className="bg-card shadow">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-primary text-sm font-medium">
+                        Est. FTP
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">{ftp} W</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Based on your best avg speed
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Weekly TSS */}
+                  <Card className="bg-card shadow">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-primary text-sm font-medium">
+                        Weekly TSS
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">{weeklyLoad.load}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Past 7 days &middot; {weeklyLoad.trendLabel}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Training Load Trend */}
+                  <Card className="bg-card shadow">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-primary text-sm font-medium">
+                        Load Trend
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex items-center gap-3">
+                      {trendIcon}
+                      <div>
+                        <p className="text-lg font-semibold capitalize">
+                          {weeklyLoad.trendLabel}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          vs previous week
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Recovery Recommendation */}
+                  <Card className="bg-card shadow">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-primary text-sm font-medium">
+                        Recovery
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm leading-relaxed">
+                        {weeklyLoad.recommendation || "Complete a ride to get recovery insights."}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Training Load Chart */}
+                <Card className="bg-card shadow">
+                  <CardHeader>
+                    <CardTitle className="text-primary text-lg">
+                      Training Load (14 Days)
+                    </CardTitle>
+                    <CardDescription>
+                      Daily Training Stress Score
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TrainingLoadChart data={trainingLoadData} />
+                  </CardContent>
+                </Card>
+              </>
             )}
           </section>
         </main>

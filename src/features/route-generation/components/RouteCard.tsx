@@ -6,6 +6,7 @@ import {
   collection,
   addDoc,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import {
   GoogleMap,
@@ -20,6 +21,7 @@ import {
 } from "@/features/route-generation/services/open-route-service";
 import { downloadGpx } from "@/features/route-generation/services/gpx-service";
 import { detectSurfaceType } from "@/features/route-generation/services/surface-service";
+import { ElevationProfile } from "@/features/route-generation/components/ElevationProfile";
 import { formatDuration, estimateCalories, classifyDifficulty } from "@/shared/lib/utils";
 import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
 
@@ -46,6 +48,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Icons } from "@/components/icons";
 import { useToast } from "@/hooks/use-toast";
+import { checkAchievements } from "@/features/achievements";
+import type { RideDataForAchievements } from "@/features/achievements";
 
 interface RouteCardProps {
   route: CyclingRoute;
@@ -375,8 +379,39 @@ export const RouteCard = React.memo(function RouteCard({
         rideDataToSave.ascent = rideSummaryData.route.ascent;
       }
 
-      await addDoc(completedRidesCollection, rideDataToSave);
+      // Save the ride and capture the doc reference for achievements
+      const docRef = await addDoc(completedRidesCollection, rideDataToSave);
       toast({ title: "Ride Saved", description: "Your completed ride has been saved to your dashboard." });
+
+      // Check achievements for the newly completed ride
+      try {
+        const rideForAchievements: RideDataForAchievements = {
+          id: docRef.id,
+          completedAt: Timestamp.now(), // Use current time since ride was just completed
+          actualDistanceCoveredKm: rideDataToSave.actualDistanceCoveredKm,
+          plannedDistanceKm: rideDataToSave.plannedDistanceKm,
+          ascent: rideDataToSave.ascent,
+          routeName: rideDataToSave.routeName,
+        };
+
+        const newlyAwarded = await checkAchievements({
+          userId: user.uid,
+          rideId: docRef.id,
+          ride: rideForAchievements,
+        });
+
+        if (newlyAwarded.length > 0) {
+          newlyAwarded.forEach((achievement) => {
+            toast({
+              title: `🏆 Achievement Unlocked!`,
+              description: `${achievement.name}: ${achievement.description}`,
+            });
+          });
+        }
+      } catch (achError: any) {
+        console.error("Error checking achievements:", achError);
+        // Don't show error toast for achievements - non-critical
+      }
     } catch (error: any) {
       console.error("Error saving completed ride:", error);
       let description = "Failed to save completed ride.";
@@ -469,6 +504,16 @@ export const RouteCard = React.memo(function RouteCard({
         ) : (
           <Skeleton className="h-[300px] w-full bg-muted" />
         )}
+
+        {/* Elevation profile — only for routes with enough points */}
+        {!isRideModeActive &&
+          route.coordinates &&
+          route.coordinates.length > 10 && (
+            <ElevationProfile
+              coordinates={route.coordinates}
+              ascent={route.ascent}
+            />
+          )}
 
         {isRideModeActive && (
           <div className="mt-4 p-3 bg-muted rounded-md border border-border">

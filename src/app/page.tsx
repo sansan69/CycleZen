@@ -34,6 +34,10 @@ const WeatherWidget = dynamic(
   { ssr: false }
 );
 import { useGoogleMaps } from "@/features/map/hooks/useGoogleMaps";
+const AIRecommendations = dynamic(
+  () => import("@/features/recommendations/components/AIRecommendations").then(mod => ({ default: mod.AIRecommendations })),
+  { ssr: false }
+);
 
 import {
   DropdownMenu,
@@ -567,6 +571,11 @@ const HomePage = () => {
             </Button>
           </CardFooter>
         </Card>
+
+        {/* AI route recommendations — based on saved routes */}
+        {currentUser && !loadingRoutes && (
+          <AIRecommendations user={currentUser} />
+        )}
 
         {loadingRoutes && (
           <div className="space-y-4">

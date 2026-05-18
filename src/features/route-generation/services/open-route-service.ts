@@ -15,6 +15,10 @@ export interface Coordinate {
    * The longitude of the coordinate.
    */
   lng: number;
+  /**
+   * Optional elevation in meters (available when ORS elevation=true is requested).
+   */
+  elev?: number;
 }
 
 /**
@@ -119,7 +123,8 @@ async function fetchRoute(
       "length": targetLengthMeters, 
       "points": 3, 
       "seed": Math.floor(Math.random() * 10000) 
-    }
+    },
+    "elevation": "true",
   };
 
   const body = {
@@ -127,6 +132,7 @@ async function fetchRoute(
     "options": options,
     "preference": "recommended", // Moved here as per previous fix
     "geometry_simplify": "true", 
+    "elevation": "true",
     "instructions_format": "text", // To get textual instructions
     "language": "en",
   };
@@ -171,7 +177,13 @@ async function fetchRoute(
   }
 
   const routeCoordinates: Coordinate[] = feature.geometry.coordinates.map(
-    ([lng, lat]: number[]) => ({ lat, lng })
+    ([lng, lat, elev]: number[]) => {
+      const coord: Coordinate = { lat, lng };
+      if (typeof elev === 'number' && isFinite(elev)) {
+        coord.elev = elev;
+      }
+      return coord;
+    }
   );
 
   const summary = feature.properties.summary || (feature.properties.segments && feature.properties.segments[0]);
