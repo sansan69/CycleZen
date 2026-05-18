@@ -3,26 +3,51 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper: check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: check if user owns the document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Default: deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // Users collection
     match /users/{userId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
 
-      // Only the authenticated user can read/write their own profile
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-
-      // Saved routes subcollection
-      match /savedRoutes/{routeId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Rides subcollection (saved routes + completed rides)
+      match /rides/{rideId} {
+        allow read, write: if isSignedIn() && isOwner(userId);
       }
 
-      // Completed rides subcollection
-      match /completedRides/{rideId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+      match /bikes/{bikeId} {
+        allow read, write: if isSignedIn() && isOwner(userId);
+      }
+
+      match /stats/{statId} {
+        allow read: if isSignedIn() && isOwner(userId);
+        allow write: if isSignedIn() && isOwner(userId);
       }
     }
 
-    // Deny everything else
-    match /{document=**} {
-      allow read, write: if false;
+    // Public profiles (readable by any authenticated user)
+    match /profiles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Community rides (readable by all authenticated, writable by owner)
+    match /communityRides/{rideId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.userId);
     }
   }
 }

@@ -38,7 +38,7 @@ export const AIRecommendations: React.FC<AIRecommendationsProps> = ({ user }) =>
     async function fetchAndRecommend() {
       try {
         // Get user's saved routes for analysis
-        const savedRef = collection(db!, "users", user!.uid, "savedRoutes");
+        const savedRef = collection(db!, "users", user!.uid, "rides");
         const savedQuery = query(savedRef, limit(20));
         const snapshot = await getDocs(savedQuery);
 

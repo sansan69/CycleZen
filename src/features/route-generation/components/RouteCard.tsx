@@ -191,7 +191,7 @@ export const RouteCard = React.memo(function RouteCard({
       return;
     }
     try {
-      const userSavedRoutesCollection = collection(db, "users", user.uid, "savedRoutes");
+      const userSavedRoutesCollection = collection(db, "users", user.uid, "rides");
 
       const routeDataToSave: any = {
         distance: route.distance,
@@ -361,7 +361,7 @@ export const RouteCard = React.memo(function RouteCard({
     }
 
     try {
-      const completedRidesCollection = collection(db, "users", user.uid, "completedRides");
+      const completedRidesCollection = collection(db, "users", user.uid, "rides");
       const rideDataToSave: any = {
         routeName: `Ride near ${selectedLocationForRouteName ? `${selectedLocationForRouteName.lat.toFixed(2)}, ${selectedLocationForRouteName.lng.toFixed(2)}` : 'selected area'} on ${new Date().toLocaleDateString()}`,
         completedAt: serverTimestamp(),

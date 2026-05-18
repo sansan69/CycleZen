@@ -118,7 +118,7 @@ const SavedRoutesPage = () => {
         db,
         "users",
         currentUser.uid,
-        "savedRoutes"
+        "rides"
       );
       const q = query(routesCollection, orderBy("timestamp", "desc"));
 
@@ -190,7 +190,7 @@ const SavedRoutesPage = () => {
         db,
         "users",
         currentUser.uid,
-        "savedRoutes",
+        "rides",
         routeToDeleteId
       );
       await deleteDoc(routeDocRef);
@@ -246,7 +246,7 @@ const SavedRoutesPage = () => {
         db,
         "users",
         currentUser.uid,
-        "savedRoutes",
+        "rides",
         routeToEdit.id
       );
       await updateDoc(routeDocRef, {

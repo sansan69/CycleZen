@@ -93,30 +93,30 @@ const DashboardPage = () => {
   useEffect(() => {
     if (currentUser && db) {
       setLoadingRides(true);
-      const ridesCollection = collection(
+      const completedRidesCollection = collection(
         db,
         "users",
         currentUser.uid,
-        "completedRides"
+        "rides"
       );
-      const q = query(ridesCollection, orderBy("completedAt", "desc"));
+      const q = query(completedRidesCollection, orderBy("completedAt", "desc"));
 
       getDocs(q)
         .then((querySnapshot) => {
-          const rides: CompletedRideDoc[] = [];
+          const completedRides: CompletedRideDoc[] = [];
           let totalDistance = 0;
           let totalDurationSeconds = 0;
 
           querySnapshot.forEach((doc) => {
             const data = doc.data() as CompletedRideData;
-            rides.push({ id: doc.id, ...data });
+            completedRides.push({ id: doc.id, ...data });
             totalDistance += data.actualDistanceCoveredKm ?? data.plannedDistanceKm;
             totalDurationSeconds += data.actualDurationSeconds;
           });
           
-          setCompletedRides(rides);
+          setCompletedRides(completedRides);
           setStats({
-            totalRides: rides.length,
+            totalRides: completedRides.length,
             totalDistance: totalDistance,
             totalDurationSeconds: totalDurationSeconds,
           });
