@@ -29,6 +29,7 @@ import {
   onAuthUserChanged
 } from "@/features/auth/services/auth-service";
 import { getCyclingRoutes, Coordinate, CyclingRoute, RouteStep } from "@/features/route-generation/services/open-route-service";
+import { getDirectionsRoute } from "@/features/route-generation/services/google-directions-service";
 const WeatherWidget = dynamic(
   () => import("@/features/weather").then(mod => ({ default: mod.WeatherWidget })),
   { ssr: false }
@@ -75,6 +76,10 @@ const GoogleMapComponent = dynamic(
     ),
     ssr: false,
   });
+const ManualRoutePlanner = dynamic(
+  () => import("@/features/route-generation/components/ManualRoutePlanner"),
+  { ssr: false }
+);
 
 import { useAppStore } from "@/stores";
 import { RouteCard } from "@/features/route-generation/components/RouteCard";
@@ -87,6 +92,7 @@ const HomePage = () => {
   const [loadingRoutes, setLoadingRoutes] = useState<boolean>(false);
   const { toast } = useToast();
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
+  const [routeMode, setRouteMode] = useState<"ai" | "manual">("ai");
   const previousSelectedLocationRef = useRef<Coordinate | null>(null);
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -299,6 +305,39 @@ const HomePage = () => {
     }
   }, [selectedLocation, radius, toast]);
 
+  const handleManualRoute = useCallback(async (waypoints: Coordinate[]) => {
+    setLoadingRoutes(true);
+    setRoutes(null);
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        toast({
+          title: "API Key Missing",
+          description: "Google Maps API key is missing. Please configure it.",
+          variant: "destructive",
+        });
+        setLoadingRoutes(false);
+        return;
+      }
+      const route = await getDirectionsRoute(waypoints, apiKey);
+      setRoutes([route]);
+      setShowMapInput(false);
+      toast({
+        title: "Route Generated",
+        description: `${(route.distance).toFixed(1)} km — ${Math.round(route.estimatedTime)} min`,
+      });
+    } catch (error: any) {
+      console.error("Error generating manual route:", error);
+      toast({
+        title: "Route Error",
+        description: error.message || "Failed to generate route. Try adjusting waypoints.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingRoutes(false);
+    }
+  }, [toast]);
+
   const handleLocationSelected = useCallback((locationFromMap: Coordinate) => {
     setSelectedLocation(locationFromMap);
   }, []);
@@ -447,13 +486,44 @@ const HomePage = () => {
       <main className="container mx-auto max-w-2xl p-4 sm:p-6 md:p-8">
         <Card className="mb-6 bg-card shadow-xl rounded-xl">
           <CardHeader>
-            <CardTitle className="text-2xl text-primary">Route Generation</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Select a starting point and target distance to find your next ride.
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-2xl text-primary">Route Generation</CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  {routeMode === "ai"
+                    ? "Select a starting point and target distance to find your next ride."
+                    : "Click points on the map to build your own route."}
+                </CardDescription>
+              </div>
+              <div className="flex rounded-lg border border-border bg-muted p-0.5">
+                <button
+                  onClick={() => setRouteMode("ai")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    routeMode === "ai"
+                      ? "bg-background text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icons.sparkles className="h-3.5 w-3.5" />
+                  AI Generate
+                </button>
+                <button
+                  onClick={() => setRouteMode("manual")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    routeMode === "manual"
+                      ? "bg-background text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icons.route className="h-3.5 w-3.5" />
+                  Plan Manually
+                </button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-6">
-            {isLoaded && (
+            {/* AI mode: location search + radius */}
+            {routeMode === "ai" && isLoaded && (
               <div className="grid gap-2">
                  <Label
                     htmlFor="location-search"
@@ -476,13 +546,15 @@ const HomePage = () => {
                 </Autocomplete>
               </div>
             )}
-            {!isLoaded && !loadError && (
+            {routeMode === "ai" && !isLoaded && !loadError && (
                  <Skeleton className="h-10 w-full" />
             )}
-            {loadError && (
+            {routeMode === "ai" && loadError && (
                 <p className="text-sm text-destructive">Could not load Google Maps search. Please check your API key and internet connection.</p>
             )}
 
+            {/* AI mode: radius slider */}
+            {routeMode === "ai" && (
             <div className="grid gap-2">
               <Label
                 htmlFor="radius"
@@ -531,8 +603,10 @@ const HomePage = () => {
                  This radius defines the search area on the map. Generated loop routes will have a target distance based on this value (5-100 km).
               </p>
             </div>
+            )}
             
-            {showMapInput && (
+            {/* AI mode: map + marker + radius circle */}
+            {routeMode === "ai" && showMapInput && (
              <div className="rounded-lg overflow-hidden shadow-md border border-border">
                 <GoogleMapComponent
                   onLocationSelected={handleLocationSelected}
@@ -544,7 +618,7 @@ const HomePage = () => {
                 />
               </div>
             )}
-            {!showMapInput && selectedLocation && (
+            {routeMode === "ai" && !showMapInput && selectedLocation && (
               <div className="text-sm p-3 bg-muted rounded-md border border-border">
                 <p className="font-semibold text-foreground">Starting Location:</p>
                 <p className="text-muted-foreground">Lat: {selectedLocation.lat.toFixed(4)}, Lng: {selectedLocation.lng.toFixed(4)}</p>
@@ -554,10 +628,24 @@ const HomePage = () => {
               </div>
             )}
 
+            {/* Manual mode: waypoint-based map */}
+            {routeMode === "manual" && (
+              <ManualRoutePlanner
+                googleMapsApiKey={googleMapsApiKey}
+                isLoaded={isLoaded}
+                loadError={loadError}
+                initialLocation={selectedLocation}
+                onRouteGenerated={handleManualRoute}
+                loading={loadingRoutes}
+              />
+            )}
+
             {selectedLocation && (
               <WeatherWidget location={selectedLocation} />
             )}
           </CardContent>
+          {/* AI mode: Generate Routes button */}
+          {routeMode === "ai" && (
           <CardFooter className="pt-6">
             <Button
               onClick={handleGenerateRoutes}
@@ -570,6 +658,7 @@ const HomePage = () => {
               ) : "Generate Routes"}
             </Button>
           </CardFooter>
+          )}
         </Card>
 
         {/* AI route recommendations — based on saved routes */}
