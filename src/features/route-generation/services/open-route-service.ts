@@ -123,17 +123,15 @@ async function fetchRoute(
       "length": targetLengthMeters, 
       "points": 3, 
       "seed": Math.floor(Math.random() * 10000) 
-    },
-    "elevation": "true",
+    }
   };
 
   const body = {
     "coordinates": coordinatesPayload,
     "options": options,
-    "preference": "recommended", // Moved here as per previous fix
-    "geometry_simplify": "true", 
-    "elevation": "true",
-    "instructions_format": "text", // To get textual instructions
+    "preference": "recommended",
+    "geometry_simplify": "true",
+    "instructions_format": "text",
     "language": "en",
   };
 
